@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame, QFileDialog, QListWidget, QHBoxLayout)
+                             QMenuBar, QAction, QStatusBar, QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
 from PyQt5.QtGui import QIcon
 
@@ -11,9 +11,9 @@ class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
     search_complete_signal = pyqtSignal(bool)
 
-    def __init__(self, directories, fileName, fileFormat, minSize, maxSize, looseMatch):
+    def __init__(self, rootDir, fileName, fileFormat, minSize, maxSize, looseMatch):
         super().__init__()
-        self.directories = directories
+        self.rootDir = rootDir
         self.fileName = fileName
         self.fileFormat = fileFormat
         self.minSize = minSize
@@ -23,22 +23,28 @@ class FileSearchThread(QThread):
 
     def run(self):
         files_found = False
-        for rootDir in self.directories:
-            for root, dirs, files in os.walk(rootDir):
-                if not self._is_running:
-                    break
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        file_size = os.path.getsize(file_path)
-                    except OSError:
-                        continue  # Skip inaccessible files
+        for root, dirs, files in os.walk(self.rootDir):
+            if not self._is_running:
+                break
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    file_size = os.path.getsize(file_path)
+                except OSError:
+                    continue  # Skip inaccessible files
 
-                    if ((self.looseMatch and self.fileName.lower() in file.lower()) or 
-                        (file.lower() == self.fileName.lower() + (self.fileFormat.lower() if self.fileFormat else ''))) and \
-                        (self.minSize <= file_size <= self.maxSize):
-                        self.file_found_signal.emit(file_path)
-                        files_found = True
+                # Check if the file name matches the criteria
+                if self.fileFormat:
+                    # If a format is specified, the file name must end with that format
+                    if not file.lower().endswith(self.fileFormat.lower()):
+                        continue
+
+                file_name_without_extension = os.path.splitext(file)[0]
+                if ((self.looseMatch and self.fileName.lower() in file_name_without_extension.lower()) or 
+                    (file_name_without_extension.lower() == self.fileName.lower())) and \
+                    (self.minSize <= file_size <= self.maxSize):
+                    self.file_found_signal.emit(file_path)
+                    files_found = True
 
         self.search_complete_signal.emit(files_found)
 
@@ -53,7 +59,6 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 600, 600)
         self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
         self.current_theme = 'light'
-        self.selected_directories = []
         self.initUI()
         self.found_files = []
 
@@ -72,16 +77,6 @@ class MainWindow(QMainWindow):
         self.labelTitle.setAlignment(Qt.AlignCenter)
         self.labelTitle.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
         self.layout.addWidget(self.labelTitle)
-
-        self.addSeparator()
-
-        self.directoryListWidget = QListWidget(self)
-        self.layout.addWidget(QLabel("Dossiers sélectionnés :", self.centralWidget))
-        self.layout.addWidget(self.directoryListWidget)
-
-        self.selectDirButton = QPushButton("Sélectionner des dossiers", self)
-        self.selectDirButton.clicked.connect(self.selectDirectories)
-        self.layout.addWidget(self.selectDirButton)
 
         self.addSeparator()
 
@@ -288,17 +283,7 @@ class MainWindow(QMainWindow):
                 animation.setEasingCurve(QEasingCurve.OutBounce)
                 animation.start(QPropertyAnimation.DeleteWhenStopped)
 
-    def selectDirectories(self):
-        directories = QFileDialog.getExistingDirectory(self, "Sélectionner des dossiers", "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks | QFileDialog.Option())
-        if directories:
-            self.selected_directories.append(directories)
-            self.directoryListWidget.addItem(directories)
-
     def startSearch(self):
-        if not self.selected_directories:
-            QMessageBox.warning(self, "Erreur", "Veuillez sélectionner au moins un dossier pour la recherche.")
-            return
-        
         self.disableInputs(True)
         self.statusBar.showMessage("Recherche en cours...")
         self.found_files.clear()
@@ -311,8 +296,9 @@ class MainWindow(QMainWindow):
         minSize = self.spinBoxMinSize.value() * 1024
         maxSize = self.spinBoxMaxSize.value() * 1024
         looseMatch = self.checkBoxLooseMatch.isChecked()
+        rootDir = '/'  # Adjust this to your system if needed
 
-        self.search_thread = FileSearchThread(self.selected_directories, fileName, fileFormat, minSize, maxSize, looseMatch)
+        self.search_thread = FileSearchThread(rootDir, fileName, fileFormat, minSize, maxSize, looseMatch)
         self.search_thread.file_found_signal.connect(self.fileFound)
         self.search_thread.search_complete_signal.connect(self.searchComplete)
         self.search_thread.start()
@@ -324,7 +310,6 @@ class MainWindow(QMainWindow):
         self.spinBoxMaxSize.setDisabled(disable)
         self.checkBoxLooseMatch.setDisabled(disable)
         self.pushButtonSearch.setDisabled(disable)
-        self.selectDirButton.setDisabled(disable)
 
     def fileFound(self, filePath):
         self.found_files.append(filePath)
