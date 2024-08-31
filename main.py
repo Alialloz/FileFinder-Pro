@@ -1,8 +1,11 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar, QMenuBar, QAction
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
+                             QComboBox, QPushButton, QVBoxLayout, QWidget, 
+                             QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
+                             QMenuBar, QAction, QStatusBar, QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon
 
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
@@ -56,6 +59,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(self.light_theme_stylesheet())
 
         self.createMenuBar()
+        self.createStatusBar()
 
         self.centralWidget = QWidget(self)
         self.setCentralWidget(self.centralWidget)
@@ -67,6 +71,8 @@ class MainWindow(QMainWindow):
         self.labelTitle.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
         self.layout.addWidget(self.labelTitle)
 
+        self.addSeparator()
+
         self.lineEditFileName = QLineEdit(self)
         self.layout.addWidget(QLabel("Nom du fichier :", self.centralWidget))
         self.layout.addWidget(self.lineEditFileName)
@@ -74,11 +80,15 @@ class MainWindow(QMainWindow):
         self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
         self.layout.addWidget(self.checkBoxLooseMatch)
 
+        self.addSeparator()
+
         self.comboBoxFileFormat = QComboBox(self)
         self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
         self.layout.addWidget(QLabel("Format du fichier (optionnel) :", self.centralWidget))
         self.layout.addWidget(self.comboBoxFileFormat)
+
+        self.addSeparator()
 
         self.spinBoxMinSize = QSpinBox(self)
         self.spinBoxMinSize.setMaximum(1000000)
@@ -90,6 +100,8 @@ class MainWindow(QMainWindow):
         self.spinBoxMaxSize.setValue(1000000)
         self.layout.addWidget(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget))
         self.layout.addWidget(self.spinBoxMaxSize)
+
+        self.addSeparator()
 
         self.pushButtonSearch = QPushButton("Chercher", self)
         self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 10px; font-size: 16px;")
@@ -136,6 +148,11 @@ class MainWindow(QMainWindow):
         self.switchThemeAction = QAction("Basculer vers le thème sombre", self)
         self.switchThemeAction.triggered.connect(self.switchTheme)
         themeMenu.addAction(self.switchThemeAction)
+
+    def createStatusBar(self):
+        self.statusBar = QStatusBar(self)
+        self.setStatusBar(self.statusBar)
+        self.statusBar.showMessage("Prêt")
 
     def light_theme_stylesheet(self):
         return """
@@ -242,6 +259,12 @@ class MainWindow(QMainWindow):
             }
         """
 
+    def addSeparator(self):
+        separator = QFrame(self)
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        self.layout.addWidget(separator)
+
     def animateWidgets(self):
         for i in range(self.layout.count()):
             widget = self.layout.itemAt(i).widget()
@@ -254,6 +277,8 @@ class MainWindow(QMainWindow):
                 animation.start(QPropertyAnimation.DeleteWhenStopped)
 
     def startSearch(self):
+        self.disableInputs(True)
+        self.statusBar.showMessage("Recherche en cours...")
         self.found_files.clear()
         self.progressBar.setVisible(True)
         self.progressBar.setRange(0, 0)  # Indeterminate state
@@ -271,20 +296,32 @@ class MainWindow(QMainWindow):
         self.search_thread.search_complete_signal.connect(self.searchComplete)
         self.search_thread.start()
 
+    def disableInputs(self, disable):
+        self.lineEditFileName.setDisabled(disable)
+        self.comboBoxFileFormat.setDisabled(disable)
+        self.spinBoxMinSize.setDisabled(disable)
+        self.spinBoxMaxSize.setDisabled(disable)
+        self.checkBoxLooseMatch.setDisabled(disable)
+        self.pushButtonSearch.setDisabled(disable)
+
     def fileFound(self, filePath):
         self.found_files.append(filePath)
 
     def searchComplete(self, files_found):
         self.progressBar.setVisible(False)
+        self.disableInputs(False)
         if self.found_files:
             results = "\n".join(self.found_files)
             QMessageBox.information(self, "Fichiers Trouvés", f"Chemin des fichiers :\n{results}")
+            self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
         else:
             self.lineEditFileName.setStyleSheet("border: 2px solid red;")
             if not files_found:
                 QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
+                self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
             else:
                 QMessageBox.warning(self, "Recherche interrompue", "La recherche a été interrompue.")
+                self.statusBar.showMessage("Recherche interrompue")
 
     def switchTheme(self):
         if self.current_theme == 'light':
