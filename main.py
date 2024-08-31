@@ -1,11 +1,13 @@
 import sys
 import os
+import mimetypes
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QHBoxLayout, QToolButton, QGroupBox, QFormLayout)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
-from PyQt5.QtGui import QIcon
+                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QHBoxLayout, QToolButton, QGroupBox, QFormLayout, QMenu, QInputDialog)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime
+from PyQt5.QtGui import QIcon, QDesktopServices
+from PyQt5.Qt import QUrl
 
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
@@ -57,7 +59,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1000, 600)
         self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
         self.current_theme = 'light'
         self.selected_directories = []
@@ -143,11 +145,38 @@ class MainWindow(QMainWindow):
 
         self.addSeparator()
 
+        # Search results and filter area
+        self.filterLineEdit = QLineEdit(self)
+        self.filterLineEdit.setPlaceholderText("Filtrer les résultats...")
+        self.filterLineEdit.textChanged.connect(self.filterResults)
+        self.layout.addWidget(self.filterLineEdit)
+
         self.resultTable = QTableWidget(self)
         self.resultTable.setColumnCount(1)
         self.resultTable.setHorizontalHeaderLabels(["Chemin des fichiers"])
         self.resultTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
+        self.resultTable.itemSelectionChanged.connect(self.displayFileDetails)
         self.layout.addWidget(self.resultTable)
+
+        # Details panel
+        self.detailsGroupBox = QGroupBox("Détails du fichier")
+        self.detailsGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
+        self.detailsLayout = QFormLayout()
+
+        self.filePathLabel = QLabel("")
+        self.fileSizeLabel = QLabel("")
+        self.fileCreatedLabel = QLabel("")
+        self.fileModifiedLabel = QLabel("")
+
+        self.detailsLayout.addRow(QLabel("Chemin du fichier :"), self.filePathLabel)
+        self.detailsLayout.addRow(QLabel("Taille du fichier :"), self.fileSizeLabel)
+        self.detailsLayout.addRow(QLabel("Date de création :"), self.fileCreatedLabel)
+        self.detailsLayout.addRow(QLabel("Date de modification :"), self.fileModifiedLabel)
+
+        self.detailsGroupBox.setLayout(self.detailsLayout)
+        self.layout.addWidget(self.detailsGroupBox)
 
         self.layout.addStretch()  # Add stretch to push everything up and leave some space at the bottom
 
@@ -220,7 +249,6 @@ class MainWindow(QMainWindow):
                 padding: 10px 20px;
                 font-weight: bold;
                 font-size: 15px;
-                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
             }
             QPushButton:hover {
                 background-color: #2980b9;
@@ -293,7 +321,6 @@ class MainWindow(QMainWindow):
                 padding: 10px 20px;
                 font-weight: bold;
                 font-size: 15px;
-                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
             }
             QPushButton:hover {
                 background-color: #16a085;
@@ -396,7 +423,11 @@ class MainWindow(QMainWindow):
         self.found_files.append(filePath)
         row_position = self.resultTable.rowCount()
         self.resultTable.insertRow(row_position)
-        self.resultTable.setItem(row_position, 0, QTableWidgetItem(filePath))
+        
+        # Set icon based on file type
+        icon = self.getFileIcon(filePath)
+        item = QTableWidgetItem(icon, filePath)
+        self.resultTable.setItem(row_position, 0, item)
 
     def searchComplete(self, files_found):
         self.progressBar.setVisible(False)
@@ -424,13 +455,73 @@ class MainWindow(QMainWindow):
             self.search_thread.wait()
         event.accept()
 
+    def getFileIcon(self, filePath):
+        mime_type, _ = mimetypes.guess_type(filePath)
+        if mime_type:
+            if mime_type.startswith("image"):
+                return QIcon("path/to/image/icon.png")  # Replace with your icon paths
+            elif mime_type.startswith("text"):
+                return QIcon("path/to/text/icon.png")
+            elif mime_type.startswith("application/pdf"):
+                return QIcon("path/to/pdf/icon.png")
+        return QIcon("path/to/default/icon.png")  # Default icon
+
+    def showContextMenu(self, position):
+        menu = QMenu()
+        openAction = menu.addAction("Ouvrir le fichier")
+        openFolderAction = menu.addAction("Ouvrir le dossier contenant")
+        copyPathAction = menu.addAction("Copier le chemin du fichier")
+
+        action = menu.exec_(self.resultTable.viewport().mapToGlobal(position))
+
+        if action == openAction:
+            self.openFile()
+        elif action == openFolderAction:
+            self.openContainingFolder()
+        elif action == copyPathAction:
+            self.copyFilePath()
+
+    def openFile(self):
+        selected_item = self.resultTable.currentItem()
+        if selected_item:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(selected_item.text()))
+
+    def openContainingFolder(self):
+        selected_item = self.resultTable.currentItem()
+        if selected_item:
+            folder_path = os.path.dirname(selected_item.text())
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
+
+    def copyFilePath(self):
+        selected_item = self.resultTable.currentItem()
+        if selected_item:
+            clipboard = QApplication.clipboard()
+            clipboard.setText(selected_item.text())
+
+    def filterResults(self, text):
+        for row in range(self.resultTable.rowCount()):
+            item = self.resultTable.item(row, 0)
+            if text.lower() in item.text().lower():
+                self.resultTable.setRowHidden(row, False)
+            else:
+                self.resultTable.setRowHidden(row, True)
+
+    def displayFileDetails(self):
+        selected_item = self.resultTable.currentItem()
+        if selected_item:
+            file_path = selected_item.text()
+            file_info = os.stat(file_path)
+
+            self.filePathLabel.setText(file_path)
+            self.fileSizeLabel.setText(f"{file_info.st_size / 1024:.2f} Ko")
+            self.fileCreatedLabel.setText(QDateTime.fromSecsSinceEpoch(int(file_info.st_ctime)).toString(Qt.DefaultLocaleLongDate))
+            self.fileModifiedLabel.setText(QDateTime.fromSecsSinceEpoch(int(file_info.st_mtime)).toString(Qt.DefaultLocaleLongDate))
 
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-
 
 if __name__ == "__main__":
     main()
