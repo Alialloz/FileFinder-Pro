@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame)
+                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
 from PyQt5.QtGui import QIcon
 
@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
-        self.setGeometry(100, 100, 600, 600)
+        self.setGeometry(100, 100, 800, 600)
         self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
         self.current_theme = 'light'
         self.initUI()
@@ -119,6 +119,14 @@ class MainWindow(QMainWindow):
         self.progressBar.setStyleSheet("margin-top: 20px; height: 20px;")
         self.layout.addWidget(self.progressBar)
         self.progressBar.setVisible(False)
+
+        self.addSeparator()
+
+        self.resultTable = QTableWidget(self)
+        self.resultTable.setColumnCount(1)
+        self.resultTable.setHorizontalHeaderLabels(["Chemin des fichiers"])
+        self.resultTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.layout.addWidget(self.resultTable)
 
         self.layout.addStretch()  # Add stretch to push everything up and leave some space at the bottom
 
@@ -211,6 +219,12 @@ class MainWindow(QMainWindow):
                 background-color: #3498db;
                 width: 20px;
             }
+            QTableWidget {
+                background-color: #ffffff;
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                font-size: 15px;
+            }
         """
 
     def dark_theme_stylesheet(self):
@@ -264,6 +278,13 @@ class MainWindow(QMainWindow):
                 background-color: #1abc9c;
                 width: 20px;
             }
+            QTableWidget {
+                background-color: #34495e;
+                border: 1px solid #95a5a6;
+                border-radius: 8px;
+                font-size: 15px;
+                color: #ecf0f1;
+            }
         """
 
     def addSeparator(self):
@@ -287,6 +308,7 @@ class MainWindow(QMainWindow):
         self.disableInputs(True)
         self.statusBar.showMessage("Recherche en cours...")
         self.found_files.clear()
+        self.resultTable.setRowCount(0)  # Clear the table
         self.progressBar.setVisible(True)
         self.progressBar.setRange(0, 0)  # Indeterminate state
         self.lineEditFileName.setStyleSheet("")  # Reset border color
@@ -313,22 +335,19 @@ class MainWindow(QMainWindow):
 
     def fileFound(self, filePath):
         self.found_files.append(filePath)
+        row_position = self.resultTable.rowCount()
+        self.resultTable.insertRow(row_position)
+        self.resultTable.setItem(row_position, 0, QTableWidgetItem(filePath))
 
     def searchComplete(self, files_found):
         self.progressBar.setVisible(False)
         self.disableInputs(False)
-        if self.found_files:
-            results = "\n".join(self.found_files)
-            QMessageBox.information(self, "Fichiers Trouvés", f"Chemin des fichiers :\n{results}")
-            self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
-        else:
+        if not self.found_files:
             self.lineEditFileName.setStyleSheet("border: 2px solid red;")
-            if not files_found:
-                QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
-                self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
-            else:
-                QMessageBox.warning(self, "Recherche interrompue", "La recherche a été interrompue.")
-                self.statusBar.showMessage("Recherche interrompue")
+            QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
+            self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
+        else:
+            self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
 
     def switchTheme(self):
         if self.current_theme == 'light':
