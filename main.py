@@ -1,12 +1,12 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox
-from PyQt5.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMetaObject, QTimer
 from PyQt5.QtGui import QIcon
 
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
-    search_failed_signal = pyqtSignal()
+    search_complete_signal = pyqtSignal(bool)
 
     def __init__(self, rootDir, fileName, fileFormat, minSize, maxSize, looseMatch):
         super().__init__()
@@ -16,42 +16,65 @@ class FileSearchThread(QThread):
         self.minSize = minSize
         self.maxSize = maxSize
         self.looseMatch = looseMatch
+        self._is_running = True
 
     def run(self):
-        file_found = False
+        files_found = False
         for root, dirs, files in os.walk(self.rootDir):
+            if not self._is_running:
+                break
             for file in files:
                 file_path = os.path.join(root, file)
                 try:
                     file_size = os.path.getsize(file_path)
                 except OSError:
                     continue  # Skip inaccessible files
-                
+
                 if ((self.looseMatch and self.fileName.lower() in file.lower()) or file.lower() == (self.fileName.lower() + self.fileFormat.lower())) and (self.minSize <= file_size <= self.maxSize):
                     self.file_found_signal.emit(file_path)
-                    file_found = True
-                    break
-            if file_found:
-                break
-        
-        if not file_found:
-            self.search_failed_signal.emit()
+                    files_found = True
+
+        self.search_complete_signal.emit(files_found)
+
+    def stop(self):
+        self._is_running = False
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
         self.setGeometry(100, 100, 500, 500)
-        self.setWindowIcon(QIcon('path/to/icon.png'))
+        self.setWindowIcon(QIcon('path/to/icon.png'))  # Make sure the path is correct
         self.initUI()
+        self.found_files = []
 
     def initUI(self):
         self.setStyleSheet("""
-            QWidget { font-size: 16px; font-family: 'Arial'; background-color: #f5f5f5; }
-            QLabel { color: #2c3e50; }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox { border: 2px solid #2980b9; border-radius: 5px; padding: 5px; background-color: #ecf0f1; }
-            QPushButton { background-color: #3498db; color: white; border-radius: 5px; padding: 10px; font-weight: bold; }
-            QPushButton:hover { background-color: #2980b9; }
+            QWidget {
+                font-size: 16px;
+                font-family: 'Arial';
+                background-color: #f5f5f5;
+            }
+            QLabel {
+                color: #2c3e50;
+            }
+            QLineEdit, QComboBox, QCheckBox, QSpinBox {
+                border: 2px solid #2980b9;
+                border-radius: 5px;
+                padding: 5px;
+                background-color: #ecf0f1;
+            }
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border-radius: 5px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
         """)
 
         layout = QVBoxLayout()
@@ -59,7 +82,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(centralWidget)
         centralWidget.setLayout(layout)
 
-        layout.addWidget(QLabel("Trouvez vos fichiers rapidement avec ExplorAI", self))
+        layout.addWidget(QLabel("Trouvez vos fichiers rapidement avec ExplorAI"))
 
         self.lineEditFileName = QLineEdit(self)
         layout.addWidget(QLabel("Nom du fichier :"))
@@ -67,11 +90,6 @@ class MainWindow(QMainWindow):
 
         self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
         layout.addWidget(self.checkBoxLooseMatch)
-
-        self.lineEditDescription = QLineEdit(self)
-        self.lineEditDescription.setFixedHeight(60)
-        layout.addWidget(QLabel("Description :"))
-        layout.addWidget(self.lineEditDescription)
 
         self.comboBoxFileFormat = QComboBox(self)
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
@@ -93,13 +111,15 @@ class MainWindow(QMainWindow):
         self.pushButtonSearch.clicked.connect(self.startSearch)
         layout.addWidget(self.pushButtonSearch)
 
+        self.progressBar = QProgressBar(self)
+        layout.addWidget(self.progressBar)
+        self.progressBar.setVisible(False)
+
     def startSearch(self):
-        animation = QPropertyAnimation(self.pushButtonSearch, b"geometry")
-        animation.setDuration(200)
-        animation.setStartValue(QRect(self.pushButtonSearch.x(), self.pushButtonSearch.y(), self.pushButtonSearch.width(), self.pushButtonSearch.height()))
-        animation.setEndValue(QRect(self.pushButtonSearch.x(), self.pushButtonSearch.y() - 10, self.pushButtonSearch.width(), self.pushButtonSearch.height()))
-        animation.setEasingCurve(QEasingCurve.InOutQuad)
-        animation.start(QPropertyAnimation.DeleteWhenStopped)
+        self.found_files.clear()
+        self.progressBar.setVisible(True)
+        self.progressBar.setRange(0, 0)  # Indeterminate state
+        self.lineEditFileName.setStyleSheet("")  # Reset border color
 
         fileName = self.lineEditFileName.text()
         fileFormat = self.comboBoxFileFormat.currentText()
@@ -108,24 +128,39 @@ class MainWindow(QMainWindow):
         looseMatch = self.checkBoxLooseMatch.isChecked()
         rootDir = '/'  # Adjust this to your system if needed
 
-        # Start search thread
         self.search_thread = FileSearchThread(rootDir, fileName, fileFormat, minSize, maxSize, looseMatch)
         self.search_thread.file_found_signal.connect(self.fileFound)
-        self.search_thread.search_failed_signal.connect(self.searchFailed)
+        self.search_thread.search_complete_signal.connect(self.searchComplete)
         self.search_thread.start()
 
     def fileFound(self, filePath):
-        QMessageBox.information(self, "Fichier Trouvé", f"Chemin du fichier : {filePath}")
+        self.found_files.append(filePath)
 
-    def searchFailed(self):
-        self.lineEditFileName.setStyleSheet("border: 2px solid red;")
-        QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
+    def searchComplete(self, files_found):
+        self.progressBar.setVisible(False)
+        if self.found_files:
+            results = "\n".join(self.found_files)
+            QMessageBox.information(self, "Fichiers Trouvés", f"Chemin des fichiers :\n{results}")
+        else:
+            self.lineEditFileName.setStyleSheet("border: 2px solid red;")
+            if not files_found:
+                QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
+            else:
+                QMessageBox.warning(self, "Recherche interrompue", "La recherche a été interrompue.")
+
+    def closeEvent(self, event):
+        if hasattr(self, 'search_thread') and self.search_thread.isRunning():
+            self.search_thread.stop()
+            self.search_thread.wait()
+        event.accept()
+
 
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.show()  # Make sure the window is shown
+    window.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
