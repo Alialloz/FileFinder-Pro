@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QHBoxLayout)
+                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QHBoxLayout, QToolButton, QGroupBox, QFormLayout)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
 from PyQt5.QtGui import QIcon
 
@@ -77,7 +77,7 @@ class MainWindow(QMainWindow):
 
         self.labelTitle = QLabel("Trouvez vos fichiers rapidement avec ExplorAI")
         self.labelTitle.setAlignment(Qt.AlignCenter)
-        self.labelTitle.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
+        self.labelTitle.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
         self.layout.addWidget(self.labelTitle)
 
         self.addSeparator()
@@ -88,43 +88,51 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.directoryListWidget)
 
         self.selectDirButton = QPushButton("Sélectionner des dossiers", self)
+        self.selectDirButton.setStyleSheet("font-size: 16px; padding: 10px;")
         self.selectDirButton.clicked.connect(self.selectDirectories)
         self.layout.addWidget(self.selectDirButton)
 
         self.addSeparator()
 
+        # Add essential search options
         self.lineEditFileName = QLineEdit(self)
+        self.lineEditFileName.setPlaceholderText("Entrez le nom du fichier...")
         self.layout.addWidget(QLabel("Nom du fichier :", self.centralWidget))
         self.layout.addWidget(self.lineEditFileName)
 
-        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
-        self.layout.addWidget(self.checkBoxLooseMatch)
-
         self.addSeparator()
+
+        # Create dropdown for optional settings
+        self.optionalGroupBox = QGroupBox("Options avancées")
+        self.optionalGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
+        self.optionalLayout = QFormLayout()
 
         self.comboBoxFileFormat = QComboBox(self)
         self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
-        self.layout.addWidget(QLabel("Format du fichier (optionnel) :", self.centralWidget))
-        self.layout.addWidget(self.comboBoxFileFormat)
-
-        self.addSeparator()
+        self.optionalLayout.addRow(QLabel("Format du fichier (optionnel) :", self.centralWidget), self.comboBoxFileFormat)
 
         self.spinBoxMinSize = QSpinBox(self)
         self.spinBoxMinSize.setMaximum(1000000)
-        self.layout.addWidget(QLabel("Taille minimale du fichier (Ko) :", self.centralWidget))
-        self.layout.addWidget(self.spinBoxMinSize)
+        self.optionalLayout.addRow(QLabel("Taille minimale du fichier (Ko) :", self.centralWidget), self.spinBoxMinSize)
 
         self.spinBoxMaxSize = QSpinBox(self)
         self.spinBoxMaxSize.setMaximum(1000000)
         self.spinBoxMaxSize.setValue(1000000)
-        self.layout.addWidget(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget))
-        self.layout.addWidget(self.spinBoxMaxSize)
+        self.optionalLayout.addRow(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget), self.spinBoxMaxSize)
+
+        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
+        self.optionalLayout.addRow(self.checkBoxLooseMatch)
+
+        self.optionalGroupBox.setLayout(self.optionalLayout)
+        self.optionalGroupBox.setCheckable(True)
+        self.optionalGroupBox.setChecked(False)  # Initially collapsed
+        self.layout.addWidget(self.optionalGroupBox)
 
         self.addSeparator()
 
         self.pushButtonSearch = QPushButton("Chercher", self)
-        self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 10px; font-size: 16px;")
+        self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 15px; font-size: 18px; background-color: #2980b9; color: white; border-radius: 10px;")
         self.pushButtonSearch.clicked.connect(self.startSearch)
         self.layout.addWidget(self.pushButtonSearch)
 
@@ -238,6 +246,20 @@ class MainWindow(QMainWindow):
                 border-radius: 8px;
                 font-size: 15px;
             }
+            QGroupBox {
+                background-color: #ecf0f1;
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 15px;
+                margin-top: 15px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                padding: 0 5px;
+                background-color: #bdc3c7;
+                border-radius: 5px;
+            }
         """
 
     def dark_theme_stylesheet(self):
@@ -297,6 +319,20 @@ class MainWindow(QMainWindow):
                 border-radius: 8px;
                 font-size: 15px;
                 color: #ecf0f1;
+            }
+            QGroupBox {
+                background-color: #2c3e50;
+                border: 1px solid #95a5a6;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 15px;
+                margin-top: 15px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                padding: 0 5px;
+                background-color: #16a085;
+                border-radius: 5px;
             }
         """
 
