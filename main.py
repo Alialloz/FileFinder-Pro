@@ -2,7 +2,7 @@ import sys
 import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QFont
 
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
         self.setGeometry(100, 100, 500, 500)
-        self.setWindowIcon(QIcon('path/to/icon.png'))  # Make sure the path is correct
+        self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
         self.initUI()
         self.found_files = []
 
@@ -56,27 +56,51 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("""
             QWidget {
                 font-size: 16px;
-                font-family: 'Arial';
-                background-color: #f5f5f5;
+                font-family: 'Roboto', sans-serif;
+                background-color: #f0f2f5;
             }
             QLabel {
-                color: #2c3e50;
+                color: #34495e;
+                font-weight: bold;
+                margin-bottom: 10px;
             }
             QLineEdit, QComboBox, QCheckBox, QSpinBox {
-                border: 2px solid #2980b9;
-                border-radius: 5px;
-                padding: 5px;
-                background-color: #ecf0f1;
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 10px;
+                background-color: #ffffff;
+                font-size: 15px;
+            }
+            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus {
+                border: 1px solid #3498db;
+                outline: none;
             }
             QPushButton {
                 background-color: #3498db;
                 color: white;
-                border-radius: 5px;
-                padding: 10px;
+                border-radius: 8px;
+                padding: 10px 20px;
                 font-weight: bold;
+                font-size: 15px;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
             }
             QPushButton:hover {
                 background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #1f5f8a;
+            }
+            QProgressBar {
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 15px;
+                color: white;
+                background-color: #ecf0f1;
+            }
+            QProgressBar::chunk {
+                background-color: #3498db;
+                width: 20px;
             }
         """)
 
@@ -95,7 +119,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.checkBoxLooseMatch)
 
         self.comboBoxFileFormat = QComboBox(self)
-        self.comboBoxFileFormat.addItem("")  # Empty item for optional format
+        self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
         layout.addWidget(QLabel("Format du fichier (optionnel) :"))
         layout.addWidget(self.comboBoxFileFormat)
