@@ -1,7 +1,7 @@
 import sys
 import os
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMetaObject, QTimer
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon
 
 class FileSearchThread(QThread):
@@ -30,7 +30,10 @@ class FileSearchThread(QThread):
                 except OSError:
                     continue  # Skip inaccessible files
 
-                if ((self.looseMatch and self.fileName.lower() in file.lower()) or file.lower() == (self.fileName.lower() + self.fileFormat.lower())) and (self.minSize <= file_size <= self.maxSize):
+                # Check if file matches the criteria
+                if ((self.looseMatch and self.fileName.lower() in file.lower()) or 
+                    (file.lower() == self.fileName.lower() + (self.fileFormat.lower() if self.fileFormat else ''))) and \
+                    (self.minSize <= file_size <= self.maxSize):
                     self.file_found_signal.emit(file_path)
                     files_found = True
 
@@ -92,8 +95,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.checkBoxLooseMatch)
 
         self.comboBoxFileFormat = QComboBox(self)
+        self.comboBoxFileFormat.addItem("")  # Empty item for optional format
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
-        layout.addWidget(QLabel("Format du fichier :"))
+        layout.addWidget(QLabel("Format du fichier (optionnel) :"))
         layout.addWidget(self.comboBoxFileFormat)
 
         self.spinBoxMinSize = QSpinBox(self)
@@ -122,7 +126,7 @@ class MainWindow(QMainWindow):
         self.lineEditFileName.setStyleSheet("")  # Reset border color
 
         fileName = self.lineEditFileName.text()
-        fileFormat = self.comboBoxFileFormat.currentText()
+        fileFormat = self.comboBoxFileFormat.currentText() if self.comboBoxFileFormat.currentText() != "" else None
         minSize = self.spinBoxMinSize.value() * 1024
         maxSize = self.spinBoxMaxSize.value() * 1024
         looseMatch = self.checkBoxLooseMatch.isChecked()
