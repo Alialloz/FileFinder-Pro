@@ -1,7 +1,7 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QComboBox, QPushButton, QVBoxLayout, QWidget, QMessageBox, QCheckBox, QSpinBox, QProgressBar, QMenuBar, QAction
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve
 from PyQt5.QtGui import QIcon, QFont
 
 class FileSearchThread(QThread):
@@ -30,7 +30,6 @@ class FileSearchThread(QThread):
                 except OSError:
                     continue  # Skip inaccessible files
 
-                # Check if file matches the criteria
                 if ((self.looseMatch and self.fileName.lower() in file.lower()) or 
                     (file.lower() == self.fileName.lower() + (self.fileFormat.lower() if self.fileFormat else ''))) and \
                     (self.minSize <= file_size <= self.maxSize):
@@ -47,13 +46,99 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
-        self.setGeometry(100, 100, 500, 500)
+        self.setGeometry(100, 100, 600, 600)
         self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
+        self.current_theme = 'light'
         self.initUI()
         self.found_files = []
 
     def initUI(self):
-        self.setStyleSheet("""
+        self.setStyleSheet(self.light_theme_stylesheet())
+
+        self.createMenuBar()
+
+        self.centralWidget = QWidget(self)
+        self.setCentralWidget(self.centralWidget)
+        self.layout = QVBoxLayout()
+        self.centralWidget.setLayout(self.layout)
+
+        self.labelTitle = QLabel("Trouvez vos fichiers rapidement avec ExplorAI")
+        self.labelTitle.setAlignment(Qt.AlignCenter)
+        self.labelTitle.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
+        self.layout.addWidget(self.labelTitle)
+
+        self.lineEditFileName = QLineEdit(self)
+        self.layout.addWidget(QLabel("Nom du fichier :", self.centralWidget))
+        self.layout.addWidget(self.lineEditFileName)
+
+        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
+        self.layout.addWidget(self.checkBoxLooseMatch)
+
+        self.comboBoxFileFormat = QComboBox(self)
+        self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
+        self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
+        self.layout.addWidget(QLabel("Format du fichier (optionnel) :", self.centralWidget))
+        self.layout.addWidget(self.comboBoxFileFormat)
+
+        self.spinBoxMinSize = QSpinBox(self)
+        self.spinBoxMinSize.setMaximum(1000000)
+        self.layout.addWidget(QLabel("Taille minimale du fichier (Ko) :", self.centralWidget))
+        self.layout.addWidget(self.spinBoxMinSize)
+
+        self.spinBoxMaxSize = QSpinBox(self)
+        self.spinBoxMaxSize.setMaximum(1000000)
+        self.spinBoxMaxSize.setValue(1000000)
+        self.layout.addWidget(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget))
+        self.layout.addWidget(self.spinBoxMaxSize)
+
+        self.pushButtonSearch = QPushButton("Chercher", self)
+        self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 10px; font-size: 16px;")
+        self.pushButtonSearch.clicked.connect(self.startSearch)
+        self.layout.addWidget(self.pushButtonSearch)
+
+        self.progressBar = QProgressBar(self)
+        self.progressBar.setStyleSheet("margin-top: 20px; height: 20px;")
+        self.layout.addWidget(self.progressBar)
+        self.progressBar.setVisible(False)
+
+        self.layout.addStretch()  # Add stretch to push everything up and leave some space at the bottom
+
+        self.animateWidgets()
+
+    def createMenuBar(self):
+        menuBar = QMenuBar(self)
+        menuBar.setStyleSheet("""
+            QMenuBar {
+                background-color: #34495e;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QMenuBar::item {
+                background-color: #34495e;
+                padding: 5px 10px;
+            }
+            QMenuBar::item:selected {
+                background-color: #2980b9;
+            }
+            QMenu {
+                background-color: #34495e;
+                color: white;
+            }
+            QMenu::item:selected {
+                background-color: #2980b9;
+            }
+        """)
+        self.setMenuBar(menuBar)
+
+        themeMenu = menuBar.addMenu("Thème")
+
+        self.switchThemeAction = QAction("Basculer vers le thème sombre", self)
+        self.switchThemeAction.triggered.connect(self.switchTheme)
+        themeMenu.addAction(self.switchThemeAction)
+
+    def light_theme_stylesheet(self):
+        return """
             QWidget {
                 font-size: 16px;
                 font-family: 'Roboto', sans-serif;
@@ -102,46 +187,71 @@ class MainWindow(QMainWindow):
                 background-color: #3498db;
                 width: 20px;
             }
-        """)
+        """
 
-        layout = QVBoxLayout()
-        centralWidget = QWidget(self)
-        self.setCentralWidget(centralWidget)
-        centralWidget.setLayout(layout)
+    def dark_theme_stylesheet(self):
+        return """
+            QWidget {
+                font-size: 16px;
+                font-family: 'Roboto', sans-serif;
+                background-color: #2c3e50;
+            }
+            QLabel {
+                color: #ecf0f1;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+            QLineEdit, QComboBox, QCheckBox, QSpinBox {
+                border: 1px solid #95a5a6;
+                border-radius: 8px;
+                padding: 10px;
+                background-color: #34495e;
+                color: #ecf0f1;
+                font-size: 15px;
+            }
+            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus {
+                border: 1px solid #1abc9c;
+                outline: none;
+            }
+            QPushButton {
+                background-color: #1abc9c;
+                color: white;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 15px;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            }
+            QPushButton:hover {
+                background-color: #16a085;
+            }
+            QPushButton:pressed {
+                background-color: #12876f;
+            }
+            QProgressBar {
+                border: 1px solid #95a5a6;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 15px;
+                color: white;
+                background-color: #34495e;
+            }
+            QProgressBar::chunk {
+                background-color: #1abc9c;
+                width: 20px;
+            }
+        """
 
-        layout.addWidget(QLabel("Trouvez vos fichiers rapidement avec ExplorAI"))
-
-        self.lineEditFileName = QLineEdit(self)
-        layout.addWidget(QLabel("Nom du fichier :"))
-        layout.addWidget(self.lineEditFileName)
-
-        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
-        layout.addWidget(self.checkBoxLooseMatch)
-
-        self.comboBoxFileFormat = QComboBox(self)
-        self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
-        self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
-        layout.addWidget(QLabel("Format du fichier (optionnel) :"))
-        layout.addWidget(self.comboBoxFileFormat)
-
-        self.spinBoxMinSize = QSpinBox(self)
-        self.spinBoxMinSize.setMaximum(1000000)
-        layout.addWidget(QLabel("Taille minimale du fichier (Ko) :"))
-        layout.addWidget(self.spinBoxMinSize)
-
-        self.spinBoxMaxSize = QSpinBox(self)
-        self.spinBoxMaxSize.setMaximum(1000000)
-        self.spinBoxMaxSize.setValue(1000000)
-        layout.addWidget(QLabel("Taille maximale du fichier (Ko) :"))
-        layout.addWidget(self.spinBoxMaxSize)
-
-        self.pushButtonSearch = QPushButton("Chercher", self)
-        self.pushButtonSearch.clicked.connect(self.startSearch)
-        layout.addWidget(self.pushButtonSearch)
-
-        self.progressBar = QProgressBar(self)
-        layout.addWidget(self.progressBar)
-        self.progressBar.setVisible(False)
+    def animateWidgets(self):
+        for i in range(self.layout.count()):
+            widget = self.layout.itemAt(i).widget()
+            if widget:
+                animation = QPropertyAnimation(widget, b"geometry")
+                animation.setDuration(500)
+                animation.setStartValue(QRect(widget.x(), widget.y() - 50, widget.width(), widget.height()))
+                animation.setEndValue(QRect(widget.x(), widget.y(), widget.width(), widget.height()))
+                animation.setEasingCurve(QEasingCurve.OutBounce)
+                animation.start(QPropertyAnimation.DeleteWhenStopped)
 
     def startSearch(self):
         self.found_files.clear()
@@ -175,6 +285,16 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
             else:
                 QMessageBox.warning(self, "Recherche interrompue", "La recherche a été interrompue.")
+
+    def switchTheme(self):
+        if self.current_theme == 'light':
+            self.setStyleSheet(self.dark_theme_stylesheet())
+            self.switchThemeAction.setText("Basculer vers le thème clair")
+            self.current_theme = 'dark'
+        else:
+            self.setStyleSheet(self.light_theme_stylesheet())
+            self.switchThemeAction.setText("Basculer vers le thème sombre")
+            self.current_theme = 'light'
 
     def closeEvent(self, event):
         if hasattr(self, 'search_thread') and self.search_thread.isRunning():
