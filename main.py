@@ -7,10 +7,10 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit,
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
                              QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QGroupBox, QFormLayout, QMenu, QDateEdit, QHBoxLayout)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime, QTranslator, QLocale, QLibraryInfo
-from PyQt5.QtGui import QIcon, QDesktopServices
+from PyQt5.QtGui import QIcon, QDesktopServices, QFont
 from PyQt5.Qt import QUrl, QSystemTrayIcon, QStyle
 
-# Classe qui gère la recherche des fichiers dans un thread séparé
+# Thread pour la recherche de fichiers
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
     search_complete_signal = pyqtSignal(bool)
@@ -59,12 +59,12 @@ class FileSearchThread(QThread):
     def stop(self):
         self._is_running = False
 
-
+# Fenêtre principale
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(self.tr("ExplorAI - Votre assistant de recherche intelligent"))
-        self.setGeometry(100, 100, 1200, 700)
+        self.setWindowTitle("ExplorAI - Recherche intelligente de fichiers")
+        self.setGeometry(100, 100, 850, 550)  # Fenêtre plus petite par défaut
         self.setWindowIcon(QIcon('path/to/icon.png'))
         self.current_theme = 'light'
         self.selected_directories = []
@@ -81,121 +81,151 @@ class MainWindow(QMainWindow):
         self.centralWidget = QWidget(self)
         self.setCentralWidget(self.centralWidget)
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(20, 20, 20, 20)  # Marges réduites pour un look plus compact
         self.centralWidget.setLayout(self.layout)
 
-        self.labelTitle = QLabel(self.tr("Trouvez vos fichiers rapidement avec ExplorAI"))
+        # Titre principal
+        self.labelTitle = QLabel("ExplorAI")
         self.labelTitle.setAlignment(Qt.AlignCenter)
-        self.labelTitle.setStyleSheet("font-size: 28px; font-weight: bold; color: #2c3e50; margin-bottom: 30px;")
+        self.labelTitle.setFont(QFont("Arial", 24, QFont.Bold))  # Taille de police ajustée
+        self.labelTitle.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
         self.layout.addWidget(self.labelTitle)
 
+        # Sous-titre
+        self.labelSubtitle = QLabel("Recherche intelligente et rapide de vos fichiers")
+        self.labelSubtitle.setAlignment(Qt.AlignCenter)
+        self.labelSubtitle.setFont(QFont("Arial", 12))
+        self.labelSubtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
+        self.layout.addWidget(self.labelSubtitle)
+
         self.addSeparator()
 
-        # Nouvelle disposition en grille pour les entrées principales
-        gridLayout = QHBoxLayout()
-        self.layout.addLayout(gridLayout)
-
-        # Répertoires sélectionnés
+        # Dossiers sélectionnés
         self.directoryListWidget = QListWidget(self)
-        self.directoryListWidget.setStyleSheet("font-size: 14px;")
-        gridLayout.addWidget(self.directoryListWidget)
+        self.layout.addWidget(QLabel("Dossiers sélectionnés :", self.centralWidget))
+        self.layout.addWidget(self.directoryListWidget)
 
-        # Bouton pour sélectionner les répertoires
-        self.selectDirButton = QPushButton(self.tr("Sélectionner des dossiers"), self)
-        self.selectDirButton.setStyleSheet("font-size: 16px; padding: 10px;")
+        # Bouton de sélection de dossiers
+        self.selectDirButton = QPushButton("Sélectionner des dossiers", self)
+        self.selectDirButton.setStyleSheet(self.get_button_stylesheet())
         self.selectDirButton.clicked.connect(self.selectDirectories)
-        gridLayout.addWidget(self.selectDirButton)
+        self.layout.addWidget(self.selectDirButton)
 
         self.addSeparator()
 
-        # Champ pour le nom de fichier
+        # Champs pour entrer le nom du fichier à rechercher
         self.lineEditFileName = QLineEdit(self)
-        self.lineEditFileName.setPlaceholderText(self.tr("Entrez le nom du fichier..."))
-        self.layout.addWidget(QLabel(self.tr("Nom du fichier :"), self.centralWidget))
+        self.lineEditFileName.setPlaceholderText("Entrez le nom du fichier...")
+        self.lineEditFileName.setStyleSheet(self.get_input_stylesheet())
+        self.layout.addWidget(QLabel("Nom du fichier :", self.centralWidget))
         self.layout.addWidget(self.lineEditFileName)
 
         self.addSeparator()
 
-        # Groupe des options avancées
-        self.optionalGroupBox = QGroupBox(self.tr("Options avancées"))
-        self.optionalGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
+        # Bouton pour afficher/masquer les options avancées
+        self.toggleAdvancedOptionsButton = QPushButton("Afficher les options avancées", self)
+        self.toggleAdvancedOptionsButton.setCheckable(True)
+        self.toggleAdvancedOptionsButton.setStyleSheet(self.get_toggle_button_stylesheet())
+        self.toggleAdvancedOptionsButton.clicked.connect(self.toggleAdvancedOptions)
+        self.layout.addWidget(self.toggleAdvancedOptionsButton)
+
+        # Options avancées
+        self.optionalGroupBox = QGroupBox("Options avancées")
+        self.optionalGroupBox.setStyleSheet("QGroupBox { font-size: 14px; font-weight: bold; margin-top: 10px; }")
         self.optionalLayout = QFormLayout()
 
+        # Format de fichier
         self.comboBoxFileFormat = QComboBox(self)
+        self.comboBoxFileFormat.setStyleSheet(self.get_input_stylesheet())
         self.comboBoxFileFormat.addItem("")
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
-        self.optionalLayout.addRow(QLabel(self.tr("Format du fichier (optionnel) :"), self.centralWidget), self.comboBoxFileFormat)
+        self.optionalLayout.addRow(QLabel("Format du fichier (optionnel) :", self.centralWidget), self.comboBoxFileFormat)
 
+        # Taille du fichier
         self.spinBoxMinSize = QSpinBox(self)
         self.spinBoxMinSize.setMaximum(1000000)
-        self.optionalLayout.addRow(QLabel(self.tr("Taille minimale du fichier (Ko) :"), self.centralWidget), self.spinBoxMinSize)
+        self.spinBoxMinSize.setStyleSheet(self.get_input_stylesheet())
+        self.optionalLayout.addRow(QLabel("Taille minimale du fichier (Ko) :", self.centralWidget), self.spinBoxMinSize)
 
         self.spinBoxMaxSize = QSpinBox(self)
         self.spinBoxMaxSize.setMaximum(1000000)
         self.spinBoxMaxSize.setValue(1000000)
-        self.optionalLayout.addRow(QLabel(self.tr("Taille maximale du fichier (Ko) :"), self.centralWidget), self.spinBoxMaxSize)
+        self.spinBoxMaxSize.setStyleSheet(self.get_input_stylesheet())
+        self.optionalLayout.addRow(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget), self.spinBoxMaxSize)
 
+        # Date de création
         self.dateEditFrom = QDateEdit(self)
         self.dateEditFrom.setCalendarPopup(True)
         self.dateEditFrom.setDate(QDateTime.currentDateTime().date().addYears(-1))
-        self.optionalLayout.addRow(QLabel(self.tr("Date de création à partir de :"), self.centralWidget), self.dateEditFrom)
+        self.dateEditFrom.setStyleSheet(self.get_input_stylesheet())
+        self.optionalLayout.addRow(QLabel("Date de création à partir de :", self.centralWidget), self.dateEditFrom)
 
         self.dateEditTo = QDateEdit(self)
         self.dateEditTo.setCalendarPopup(True)
         self.dateEditTo.setDate(QDateTime.currentDateTime().date())
-        self.optionalLayout.addRow(QLabel(self.tr("Date de création jusqu'à :"), self.centralWidget), self.dateEditTo)
+        self.dateEditTo.setStyleSheet(self.get_input_stylesheet())
+        self.optionalLayout.addRow(QLabel("Date de création jusqu'à :", self.centralWidget), self.dateEditTo)
 
-        self.checkBoxLooseMatch = QCheckBox(self.tr("Recherche non stricte du nom"), self)
+        # Option de recherche non stricte
+        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
+        self.checkBoxLooseMatch.setStyleSheet(self.get_checkbox_stylesheet())
         self.optionalLayout.addRow(self.checkBoxLooseMatch)
 
         self.optionalGroupBox.setLayout(self.optionalLayout)
-        self.optionalGroupBox.setCheckable(True)
-        self.optionalGroupBox.setChecked(False)
+        self.optionalGroupBox.setVisible(False)  # Cacher les options avancées par défaut
         self.layout.addWidget(self.optionalGroupBox)
 
         self.addSeparator()
 
-        # Bouton de recherche avec icône
-        self.pushButtonSearch = QPushButton(self.tr("Chercher"), self)
-        self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 15px; font-size: 18px; background-color: #2980b9; color: white; border-radius: 10px;")
-        self.pushButtonSearch.setIcon(QIcon('path/to/search_icon.png'))  # Ajoutez une icône de recherche
+        # Bouton de recherche
+        self.pushButtonSearch = QPushButton("Chercher", self)
+        self.pushButtonSearch.setStyleSheet(self.get_primary_button_stylesheet())
         self.pushButtonSearch.clicked.connect(self.startSearch)
         self.layout.addWidget(self.pushButtonSearch)
 
+        # Barre de progression
         self.progressBar = QProgressBar(self)
-        self.progressBar.setStyleSheet("margin-top: 20px; height: 20px;")
+        self.progressBar.setStyleSheet(self.get_progressbar_stylesheet())
         self.layout.addWidget(self.progressBar)
         self.progressBar.setVisible(False)
 
         self.addSeparator()
 
+        # Champ de texte pour filtrer les résultats
         self.filterLineEdit = QLineEdit(self)
-        self.filterLineEdit.setPlaceholderText(self.tr("Filtrer les résultats..."))
+        self.filterLineEdit.setPlaceholderText("Filtrer les résultats...")
+        self.filterLineEdit.setStyleSheet(self.get_input_stylesheet())
+        self.filterLineEdit.setFixedHeight(30)
         self.filterLineEdit.textChanged.connect(self.filterResults)
         self.layout.addWidget(self.filterLineEdit)
 
+        # Tableau pour afficher les résultats de recherche
         self.resultTable = QTableWidget(self)
         self.resultTable.setColumnCount(1)
-        self.resultTable.setHorizontalHeaderLabels([self.tr("Chemin des fichiers")])
+        self.resultTable.setHorizontalHeaderLabels(["Chemin des fichiers"])
         self.resultTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
         self.resultTable.itemSelectionChanged.connect(self.displayFileDetails)
+        self.resultTable.setStyleSheet(self.get_table_stylesheet())
+        self.resultTable.setFixedHeight(150)  # Réduire la hauteur du tableau pour correspondre à la fenêtre plus petite
         self.layout.addWidget(self.resultTable)
 
-        # Nouveau panneau des détails avec des sections plus visibles
-        self.detailsGroupBox = QGroupBox(self.tr("Détails du fichier"))
-        self.detailsGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
+        # Groupe pour afficher les détails du fichier sélectionné
+        self.detailsGroupBox = QGroupBox("Détails du fichier")
+        self.detailsGroupBox.setStyleSheet(self.get_groupbox_stylesheet())
         self.detailsLayout = QFormLayout()
 
+        # Étiquettes pour afficher les détails du fichier
         self.filePathLabel = QLabel("")
         self.fileSizeLabel = QLabel("")
         self.fileCreatedLabel = QLabel("")
         self.fileModifiedLabel = QLabel("")
 
-        self.detailsLayout.addRow(QLabel(self.tr("Chemin du fichier :")), self.filePathLabel)
-        self.detailsLayout.addRow(QLabel(self.tr("Taille du fichier :")), self.fileSizeLabel)
-        self.detailsLayout.addRow(QLabel(self.tr("Date de création :")), self.fileCreatedLabel)
-        self.detailsLayout.addRow(QLabel(self.tr("Date de modification :")), self.fileModifiedLabel)
+        self.detailsLayout.addRow(QLabel("Chemin du fichier :"), self.filePathLabel)
+        self.detailsLayout.addRow(QLabel("Taille du fichier :"), self.fileSizeLabel)
+        self.detailsLayout.addRow(QLabel("Date de création :"), self.fileCreatedLabel)
+        self.detailsLayout.addRow(QLabel("Date de modification :"), self.fileModifiedLabel)
 
         self.detailsGroupBox.setLayout(self.detailsLayout)
         self.layout.addWidget(self.detailsGroupBox)
@@ -208,31 +238,31 @@ class MainWindow(QMainWindow):
         menuBar = QMenuBar(self)
         self.setMenuBar(menuBar)
 
-        fileMenu = menuBar.addMenu(self.tr("Fichier"))
+        fileMenu = menuBar.addMenu("Fichier")
 
-        saveSettingsAction = QAction(self.tr("Sauvegarder les paramètres"), self)
+        saveSettingsAction = QAction("Sauvegarder les paramètres", self)
         saveSettingsAction.triggered.connect(self.saveSettings)
         fileMenu.addAction(saveSettingsAction)
 
-        loadSettingsAction = QAction(self.tr("Charger les paramètres"), self)
+        loadSettingsAction = QAction("Charger les paramètres", self)
         loadSettingsAction.triggered.connect(self.loadSettings)
         fileMenu.addAction(loadSettingsAction)
 
-        themeMenu = menuBar.addMenu(self.tr("Thème"))
+        themeMenu = menuBar.addMenu("Thème")
 
-        lightThemeAction = QAction(self.tr("Thème Clair"), self)
+        lightThemeAction = QAction("Thème Clair", self)
         lightThemeAction.triggered.connect(lambda: self.switchTheme('light'))
         themeMenu.addAction(lightThemeAction)
 
-        darkThemeAction = QAction(self.tr("Thème Sombre"), self)
+        darkThemeAction = QAction("Thème Sombre", self)
         darkThemeAction.triggered.connect(lambda: self.switchTheme('dark'))
         themeMenu.addAction(darkThemeAction)
 
-        blueThemeAction = QAction(self.tr("Thème Bleu"), self)
+        blueThemeAction = QAction("Thème Bleu", self)
         blueThemeAction.triggered.connect(lambda: self.switchTheme('blue'))
         themeMenu.addAction(blueThemeAction)
 
-        languageMenu = menuBar.addMenu(self.tr("Langue"))
+        languageMenu = menuBar.addMenu("Langue")
 
         frenchAction = QAction("Français", self)
         frenchAction.triggered.connect(lambda: self.switchLanguage('fr'))
@@ -245,225 +275,191 @@ class MainWindow(QMainWindow):
     def createStatusBar(self):
         self.statusBar = QStatusBar(self)
         self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage(self.tr("Prêt"))
+        self.statusBar.showMessage("Prêt")
 
     def createSystemTray(self):
         self.trayIcon = QSystemTrayIcon(self)
         self.trayIcon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
         self.trayIcon.show()
 
+    def toggleAdvancedOptions(self):
+        if self.toggleAdvancedOptionsButton.isChecked():
+            self.optionalGroupBox.setVisible(True)
+            self.toggleAdvancedOptionsButton.setText("Masquer les options avancées")
+        else:
+            self.optionalGroupBox.setVisible(False)
+            self.toggleAdvancedOptionsButton.setText("Afficher les options avancées")
+
     def light_theme_stylesheet(self):
         return """
             QWidget {
-                font-size: 16px;
+                font-size: 14px;
                 font-family: 'Roboto', sans-serif;
-                background-color: #f0f2f5;
+                background-color: #f7f7f7;
+                color: #2c3e50;
             }
             QLabel {
                 color: #34495e;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #ffffff;
-                font-size: 15px;
-            }
-            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
-                border: 1px solid #3498db;
-                outline: none;
-            }
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 15px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #1f5f8a;
-            }
-            QProgressBar {
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                text-align: center;
-                font-size: 15px;
-                color: white;
-                background-color: #ecf0f1;
-            }
-            QProgressBar::chunk {
-                background-color: #3498db;
-                width: 20px;
-            }
-            QTableWidget {
-                background-color: #ffffff;
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                font-size: 15px;
-            }
-            QGroupBox {
-                background-color: #ecf0f1;
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 10px;
-                font-size: 15px;
-                margin-top: 15px;
-            }
-            QGroupBox:title {
-                subcontrol-origin: margin;
-                padding: 0 5px;
-                background-color: #bdc3c7;
-                border-radius: 5px;
             }
         """
 
     def dark_theme_stylesheet(self):
         return """
             QWidget {
-                font-size: 16px;
+                font-size: 14px;
                 font-family: 'Roboto', sans-serif;
                 background-color: #2c3e50;
+                color: #ecf0f1;
             }
             QLabel {
                 color: #ecf0f1;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
-                border: 1px solid #95a5a6;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #34495e;
-                color: #ecf0f1;
-                font-size: 15px;
-            }
-            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
-                border: 1px solid #1abc9c;
-                outline: none;
-            }
-            QPushButton {
-                background-color: #1abc9c;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 15px;
-            }
-            QPushButton:hover {
-                background-color: #16a085;
-            }
-            QPushButton:pressed {
-                background-color: #12876f;
-            }
-            QProgressBar {
-                border: 1px solid #95a5a6;
-                border-radius: 8px;
-                text-align: center;
-                font-size: 15px;
-                color: white;
-                background-color: #34495e;
-            }
-            QProgressBar::chunk {
-                background-color: #1abc9c;
-                width: 20px;
-            }
-            QTableWidget {
-                background-color: #34495e;
-                border: 1px solid #95a5a6;
-                border-radius: 8px;
-                font-size: 15px;
-                color: #ecf0f1;
-            }
-            QGroupBox {
-                background-color: #2c3e50;
-                border: 1px solid #95a5a6;
-                border-radius: 8px;
-                padding: 10px;
-                font-size: 15px;
-                margin-top: 15px;
-            }
-            QGroupBox:title {
-                subcontrol-origin: margin;
-                padding: 0 5px;
-                background-color: #16a085;
-                border-radius: 5px;
             }
         """
 
     def blue_theme_stylesheet(self):
         return """
             QWidget {
-                font-size: 16px;
+                font-size: 14px;
                 font-family: 'Roboto', sans-serif;
                 background-color: #e3f2fd;
+                color: #2c3e50;
             }
             QLabel {
                 color: #1e88e5;
-                font-weight: bold;
-                margin-bottom: 10px;
             }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
-                border: 1px solid #64b5f6;
-                border-radius: 8px;
-                padding: 10px;
-                background-color: #ffffff;
-                font-size: 15px;
-            }
-            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
-                border: 1px solid #1e88e5;
-                outline: none;
-            }
+        """
+
+    def get_button_stylesheet(self):
+        return """
             QPushButton {
-                background-color: #1e88e5;
+                background-color: #2980b9;
                 color: white;
                 border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                font-size: 15px;
+                padding: 8px 15px;
+                font-size: 14px;
             }
             QPushButton:hover {
-                background-color: #1565c0;
+                background-color: #1f5f8a;
             }
             QPushButton:pressed {
                 background-color: #0d47a1;
             }
+        """
+
+    def get_primary_button_stylesheet(self):
+        return """
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 20px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #1e8449;
+            }
+        """
+
+    def get_toggle_button_stylesheet(self):
+        return """
+            QPushButton {
+                background-color: #7f8c8d;
+                color: white;
+                border-radius: 8px;
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+            QPushButton:checked {
+                background-color: #27ae60;
+            }
+            QPushButton:hover {
+                background-color: #95a5a6;
+            }
+        """
+
+    def get_input_stylesheet(self):
+        return """
+            QLineEdit, QComboBox, QSpinBox, QDateEdit {
+                border: 1px solid #bdc3c7;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ecf0f1;
+                font-size: 14px;
+            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {
+                border: 2px solid #2980b9;
+                outline: none;
+            }
+        """
+
+    def get_checkbox_stylesheet(self):
+        return """
+            QCheckBox {
+                font-size: 14px;
+                padding: 5px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #27ae60;
+                border: 1px solid #27ae60;
+            }
+            QCheckBox::indicator:unchecked {
+                background-color: #ecf0f1;
+                border: 1px solid #bdc3c7;
+            }
+        """
+
+    def get_progressbar_stylesheet(self):
+        return """
             QProgressBar {
-                border: 1px solid #64b5f6;
+                border: 1px solid #bdc3c7;
                 border-radius: 8px;
                 text-align: center;
-                font-size: 15px;
+                font-size: 14px;
                 color: white;
-                background-color: #bbdefb;
+                background-color: #f0f2f5;
             }
             QProgressBar::chunk {
-                background-color: #1e88e5;
+                background-color: #27ae60;
                 width: 20px;
             }
+        """
+
+    def get_table_stylesheet(self):
+        return """
             QTableWidget {
                 background-color: #ffffff;
-                border: 1px solid #64b5f6;
+                border: 1px solid #bdc3c7;
                 border-radius: 8px;
-                font-size: 15px;
+                font-size: 14px;
             }
+            QHeaderView::section {
+                background-color: #2980b9;
+                color: white;
+                padding: 5px;
+                border: 1px solid #2980b9;
+            }
+            QTableWidget::item {
+                padding: 5px;
+            }
+        """
+
+    def get_groupbox_stylesheet(self):
+        return """
             QGroupBox {
-                background-color: #e3f2fd;
-                border: 1px solid #64b5f6;
+                background-color: #f0f2f5;
+                border: 1px solid #bdc3c7;
                 border-radius: 8px;
                 padding: 10px;
-                font-size: 15px;
-                margin-top: 15px;
-            }
-            QGroupBox:title {
-                subcontrol-origin: margin;
-                padding: 0 5px;
-                background-color: #64b5f6;
-                border-radius: 5px;
+                font-size: 14px;
+                margin-top: 10px;
             }
         """
 
@@ -478,25 +474,25 @@ class MainWindow(QMainWindow):
             widget = self.layout.itemAt(i).widget()
             if widget:
                 animation = QPropertyAnimation(widget, b"geometry")
-                animation.setDuration(500)
-                animation.setStartValue(QRect(widget.x(), widget.y() - 50, widget.width(), widget.height()))
+                animation.setDuration(400)
+                animation.setStartValue(QRect(widget.x(), widget.y() - 30, widget.width(), widget.height()))
                 animation.setEndValue(QRect(widget.x(), widget.y(), widget.width(), widget.height()))
-                animation.setEasingCurve(QEasingCurve.OutBounce)
+                animation.setEasingCurve(QEasingCurve.OutQuad)
                 animation.start(QPropertyAnimation.DeleteWhenStopped)
 
     def selectDirectories(self):
-        directories = QFileDialog.getExistingDirectory(self, self.tr("Sélectionner des dossiers"), "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks | QFileDialog.Option())
+        directories = QFileDialog.getExistingDirectory(self, "Sélectionner des dossiers", "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks | QFileDialog.Option())
         if directories:
             self.selected_directories.append(directories)
             self.directoryListWidget.addItem(directories)
 
     def startSearch(self):
         if not self.selected_directories:
-            QMessageBox.warning(self, self.tr("Erreur"), self.tr("Veuillez sélectionner au moins un dossier pour la recherche."))
+            QMessageBox.warning(self, "Erreur", "Veuillez sélectionner au moins un dossier pour la recherche.")
             return
         
         self.disableInputs(True)
-        self.statusBar.showMessage(self.tr("Recherche en cours..."))
+        self.statusBar.showMessage("Recherche en cours...")
         self.found_files.clear()
         self.resultTable.setRowCount(0)
         self.progressBar.setVisible(True)
@@ -540,11 +536,11 @@ class MainWindow(QMainWindow):
         self.disableInputs(False)
         if not self.found_files:
             self.lineEditFileName.setStyleSheet("border: 2px solid red;")
-            QMessageBox.warning(self, self.tr("Aucun Résultat"), self.tr("Fichier non trouvé. Veuillez vérifier le nom et réessayer."))
-            self.statusBar.showMessage(self.tr("Recherche terminée : aucun fichier trouvé"))
+            QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
+            self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
         else:
-            self.statusBar.showMessage(self.tr("Recherche terminée : fichiers trouvés"))
-            self.trayIcon.showMessage("ExplorAI", self.tr("Recherche terminée : fichiers trouvés"), QSystemTrayIcon.Information, 5000)
+            self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
+            self.trayIcon.showMessage("ExplorAI", "Recherche terminée : fichiers trouvés", QSystemTrayIcon.Information, 5000)
 
     def switchTheme(self, theme):
         self.current_theme = theme
@@ -566,14 +562,14 @@ class MainWindow(QMainWindow):
             "dateFrom": self.dateEditFrom.date().toString(Qt.ISODate),
             "dateTo": self.dateEditTo.date().toString(Qt.ISODate)
         }
-        file_name, _ = QFileDialog.getSaveFileName(self, self.tr("Sauvegarder les paramètres"), "", self.tr("JSON Files (*.json)"))
+        file_name, _ = QFileDialog.getSaveFileName(self, "Sauvegarder les paramètres", "", "JSON Files (*.json)")
         if file_name:
             with open(file_name, 'w') as file:
                 json.dump(settings, file)
-            QMessageBox.information(self, self.tr("Succès"), self.tr("Paramètres sauvegardés avec succès."))
+            QMessageBox.information(self, "Succès", "Paramètres sauvegardés avec succès.")
 
     def loadSettings(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, self.tr("Charger les paramètres"), "", self.tr("JSON Files (*.json)"))
+        file_name, _ = QFileDialog.getOpenFileName(self, "Charger les paramètres", "", "JSON Files (*.json)")
         if file_name:
             with open(file_name, 'r') as file:
                 settings = json.load(file)
@@ -587,7 +583,7 @@ class MainWindow(QMainWindow):
                 self.checkBoxLooseMatch.setChecked(settings["looseMatch"])
                 self.dateEditFrom.setDate(QDateTime.fromString(settings["dateFrom"], Qt.ISODate).date())
                 self.dateEditTo.setDate(QDateTime.fromString(settings["dateTo"], Qt.ISODate).date())
-            QMessageBox.information(self, self.tr("Succès"), self.tr("Paramètres chargés avec succès."))
+            QMessageBox.information(self, "Succès", "Paramètres chargés avec succès.")
 
     def switchLanguage(self, language_code):
         if language_code == 'fr':
@@ -599,16 +595,17 @@ class MainWindow(QMainWindow):
         self.retranslateUi()
 
     def retranslateUi(self):
-        self.setWindowTitle(self.tr("ExplorAI - Votre assistant de recherche intelligent"))
-        self.labelTitle.setText(self.tr("Trouvez vos fichiers rapidement avec ExplorAI"))
-        self.selectDirButton.setText(self.tr("Sélectionner des dossiers"))
-        self.lineEditFileName.setPlaceholderText(self.tr("Entrez le nom du fichier..."))
-        self.optionalGroupBox.setTitle(self.tr("Options avancées"))
-        self.pushButtonSearch.setText(self.tr("Chercher"))
-        self.filterLineEdit.setPlaceholderText(self.tr("Filtrer les résultats..."))
-        self.resultTable.setHorizontalHeaderLabels([self.tr("Chemin des fichiers")])
-        self.detailsGroupBox.setTitle(self.tr("Détails du fichier"))
-        self.statusBar.showMessage(self.tr("Prêt"))
+        self.setWindowTitle("ExplorAI - Recherche intelligente de fichiers")
+        self.labelTitle.setText("ExplorAI")
+        self.labelSubtitle.setText("Recherche intelligente et rapide de vos fichiers")
+        self.selectDirButton.setText("Sélectionner des dossiers")
+        self.lineEditFileName.setPlaceholderText("Entrez le nom du fichier...")
+        self.optionalGroupBox.setTitle("Options avancées")
+        self.pushButtonSearch.setText("Chercher")
+        self.filterLineEdit.setPlaceholderText("Filtrer les résultats...")
+        self.resultTable.setHorizontalHeaderLabels(["Chemin des fichiers"])
+        self.detailsGroupBox.setTitle("Détails du fichier")
+        self.statusBar.showMessage("Prêt")
 
     def closeEvent(self, event):
         if hasattr(self, 'search_thread') and self.search_thread.isRunning():
@@ -629,9 +626,9 @@ class MainWindow(QMainWindow):
 
     def showContextMenu(self, position):
         menu = QMenu()
-        openAction = menu.addAction(self.tr("Ouvrir le fichier"))
-        openFolderAction = menu.addAction(self.tr("Ouvrir le dossier contenant"))
-        copyPathAction = menu.addAction(self.tr("Copier le chemin du fichier"))
+        openAction = menu.addAction("Ouvrir le fichier")
+        openFolderAction = menu.addAction("Ouvrir le dossier contenant")
+        copyPathAction = menu.addAction("Copier le chemin du fichier")
 
         action = menu.exec_(self.resultTable.viewport().mapToGlobal(position))
 
