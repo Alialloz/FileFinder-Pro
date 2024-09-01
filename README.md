@@ -22,14 +22,14 @@ Clonez le dépôt GitHub et installez les dépendances nécessaires :
 git clone https://your-repository-link-here
 cd FileFinderPro
 pip install -r requirements.txt
-
+```
 ## Utilisation
 
 Pour démarrer l'application, exécutez le script principal :
 
 ```bash
 python main.py
-
+```
 Suivez les instructions à l'écran pour entrer les critères de recherche et commencez votre recherche en cliquant sur le bouton 'Chercher'.
 
 ## Contribuer
