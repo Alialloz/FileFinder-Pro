@@ -1,19 +1,20 @@
 import sys
 import os
 import mimetypes
+import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QHBoxLayout, QToolButton, QGroupBox, QFormLayout, QMenu, QInputDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime
+                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QGroupBox, QFormLayout, QMenu, QDateEdit)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime, QTranslator, QLocale, QLibraryInfo
 from PyQt5.QtGui import QIcon, QDesktopServices
-from PyQt5.Qt import QUrl
+from PyQt5.Qt import QUrl, QSystemTrayIcon, QStyle
 
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
     search_complete_signal = pyqtSignal(bool)
 
-    def __init__(self, directories, fileName, fileFormat, minSize, maxSize, looseMatch):
+    def __init__(self, directories, fileName, fileFormat, minSize, maxSize, looseMatch, dateFrom, dateTo):
         super().__init__()
         self.directories = directories
         self.fileName = fileName
@@ -21,6 +22,8 @@ class FileSearchThread(QThread):
         self.minSize = minSize
         self.maxSize = maxSize
         self.looseMatch = looseMatch
+        self.dateFrom = dateFrom
+        self.dateTo = dateTo
         self._is_running = True
 
     def run(self):
@@ -33,19 +36,21 @@ class FileSearchThread(QThread):
                     file_path = os.path.join(root, file)
                     try:
                         file_size = os.path.getsize(file_path)
+                        file_mtime = os.path.getmtime(file_path)
                     except OSError:
                         continue  # Skip inaccessible files
 
-                    # Check if the file name matches the criteria
                     if self.fileFormat:
-                        # If a format is specified, the file name must end with that format
                         if not file.lower().endswith(self.fileFormat.lower()):
                             continue
 
                     file_name_without_extension = os.path.splitext(file)[0]
+                    file_date = QDateTime.fromSecsSinceEpoch(int(file_mtime)).date()
+
                     if ((self.looseMatch and self.fileName.lower() in file_name_without_extension.lower()) or 
                         (file_name_without_extension.lower() == self.fileName.lower())) and \
-                        (self.minSize <= file_size <= self.maxSize):
+                        (self.minSize <= file_size <= self.maxSize) and \
+                        (self.dateFrom <= file_date <= self.dateTo):
                         self.file_found_signal.emit(file_path)
                         files_found = True
 
@@ -58,26 +63,27 @@ class FileSearchThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ExplorAI - Votre assistant de recherche intelligent")
+        self.setWindowTitle(self.tr("ExplorAI - Votre assistant de recherche intelligent"))
         self.setGeometry(100, 100, 1000, 600)
         self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
         self.current_theme = 'light'
         self.selected_directories = []
+        self.translator = QTranslator()
+        self.current_language = 'fr'  # Default language is French
         self.initUI()
         self.found_files = []
 
     def initUI(self):
-        self.setStyleSheet(self.light_theme_stylesheet())
-
         self.createMenuBar()
         self.createStatusBar()
+        self.createSystemTray()
 
         self.centralWidget = QWidget(self)
         self.setCentralWidget(self.centralWidget)
         self.layout = QVBoxLayout()
         self.centralWidget.setLayout(self.layout)
 
-        self.labelTitle = QLabel("Trouvez vos fichiers rapidement avec ExplorAI")
+        self.labelTitle = QLabel(self.tr("Trouvez vos fichiers rapidement avec ExplorAI"))
         self.labelTitle.setAlignment(Qt.AlignCenter)
         self.labelTitle.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
         self.layout.addWidget(self.labelTitle)
@@ -86,10 +92,10 @@ class MainWindow(QMainWindow):
 
         # Add the directory selection UI
         self.directoryListWidget = QListWidget(self)
-        self.layout.addWidget(QLabel("Dossiers sélectionnés :", self.centralWidget))
+        self.layout.addWidget(QLabel(self.tr("Dossiers sélectionnés :"), self.centralWidget))
         self.layout.addWidget(self.directoryListWidget)
 
-        self.selectDirButton = QPushButton("Sélectionner des dossiers", self)
+        self.selectDirButton = QPushButton(self.tr("Sélectionner des dossiers"), self)
         self.selectDirButton.setStyleSheet("font-size: 16px; padding: 10px;")
         self.selectDirButton.clicked.connect(self.selectDirectories)
         self.layout.addWidget(self.selectDirButton)
@@ -98,32 +104,42 @@ class MainWindow(QMainWindow):
 
         # Add essential search options
         self.lineEditFileName = QLineEdit(self)
-        self.lineEditFileName.setPlaceholderText("Entrez le nom du fichier...")
-        self.layout.addWidget(QLabel("Nom du fichier :", self.centralWidget))
+        self.lineEditFileName.setPlaceholderText(self.tr("Entrez le nom du fichier..."))
+        self.layout.addWidget(QLabel(self.tr("Nom du fichier :"), self.centralWidget))
         self.layout.addWidget(self.lineEditFileName)
 
         self.addSeparator()
 
         # Create dropdown for optional settings
-        self.optionalGroupBox = QGroupBox("Options avancées")
+        self.optionalGroupBox = QGroupBox(self.tr("Options avancées"))
         self.optionalGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
         self.optionalLayout = QFormLayout()
 
         self.comboBoxFileFormat = QComboBox(self)
         self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
-        self.optionalLayout.addRow(QLabel("Format du fichier (optionnel) :", self.centralWidget), self.comboBoxFileFormat)
+        self.optionalLayout.addRow(QLabel(self.tr("Format du fichier (optionnel) :"), self.centralWidget), self.comboBoxFileFormat)
 
         self.spinBoxMinSize = QSpinBox(self)
         self.spinBoxMinSize.setMaximum(1000000)
-        self.optionalLayout.addRow(QLabel("Taille minimale du fichier (Ko) :", self.centralWidget), self.spinBoxMinSize)
+        self.optionalLayout.addRow(QLabel(self.tr("Taille minimale du fichier (Ko) :"), self.centralWidget), self.spinBoxMinSize)
 
         self.spinBoxMaxSize = QSpinBox(self)
         self.spinBoxMaxSize.setMaximum(1000000)
         self.spinBoxMaxSize.setValue(1000000)
-        self.optionalLayout.addRow(QLabel("Taille maximale du fichier (Ko) :", self.centralWidget), self.spinBoxMaxSize)
+        self.optionalLayout.addRow(QLabel(self.tr("Taille maximale du fichier (Ko) :"), self.centralWidget), self.spinBoxMaxSize)
 
-        self.checkBoxLooseMatch = QCheckBox("Recherche non stricte du nom", self)
+        self.dateEditFrom = QDateEdit(self)
+        self.dateEditFrom.setCalendarPopup(True)
+        self.dateEditFrom.setDate(QDateTime.currentDateTime().date().addYears(-1))  # Default to one year ago
+        self.optionalLayout.addRow(QLabel(self.tr("Date de création à partir de :"), self.centralWidget), self.dateEditFrom)
+
+        self.dateEditTo = QDateEdit(self)
+        self.dateEditTo.setCalendarPopup(True)
+        self.dateEditTo.setDate(QDateTime.currentDateTime().date())  # Default to today
+        self.optionalLayout.addRow(QLabel(self.tr("Date de création jusqu'à :"), self.centralWidget), self.dateEditTo)
+
+        self.checkBoxLooseMatch = QCheckBox(self.tr("Recherche non stricte du nom"), self)
         self.optionalLayout.addRow(self.checkBoxLooseMatch)
 
         self.optionalGroupBox.setLayout(self.optionalLayout)
@@ -133,7 +149,7 @@ class MainWindow(QMainWindow):
 
         self.addSeparator()
 
-        self.pushButtonSearch = QPushButton("Chercher", self)
+        self.pushButtonSearch = QPushButton(self.tr("Chercher"), self)
         self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 15px; font-size: 18px; background-color: #2980b9; color: white; border-radius: 10px;")
         self.pushButtonSearch.clicked.connect(self.startSearch)
         self.layout.addWidget(self.pushButtonSearch)
@@ -147,13 +163,13 @@ class MainWindow(QMainWindow):
 
         # Search results and filter area
         self.filterLineEdit = QLineEdit(self)
-        self.filterLineEdit.setPlaceholderText("Filtrer les résultats...")
+        self.filterLineEdit.setPlaceholderText(self.tr("Filtrer les résultats..."))
         self.filterLineEdit.textChanged.connect(self.filterResults)
         self.layout.addWidget(self.filterLineEdit)
 
         self.resultTable = QTableWidget(self)
         self.resultTable.setColumnCount(1)
-        self.resultTable.setHorizontalHeaderLabels(["Chemin des fichiers"])
+        self.resultTable.setHorizontalHeaderLabels([self.tr("Chemin des fichiers")])
         self.resultTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.resultTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resultTable.customContextMenuRequested.connect(self.showContextMenu)
@@ -161,7 +177,7 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.resultTable)
 
         # Details panel
-        self.detailsGroupBox = QGroupBox("Détails du fichier")
+        self.detailsGroupBox = QGroupBox(self.tr("Détails du fichier"))
         self.detailsGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
         self.detailsLayout = QFormLayout()
 
@@ -170,10 +186,10 @@ class MainWindow(QMainWindow):
         self.fileCreatedLabel = QLabel("")
         self.fileModifiedLabel = QLabel("")
 
-        self.detailsLayout.addRow(QLabel("Chemin du fichier :"), self.filePathLabel)
-        self.detailsLayout.addRow(QLabel("Taille du fichier :"), self.fileSizeLabel)
-        self.detailsLayout.addRow(QLabel("Date de création :"), self.fileCreatedLabel)
-        self.detailsLayout.addRow(QLabel("Date de modification :"), self.fileModifiedLabel)
+        self.detailsLayout.addRow(QLabel(self.tr("Chemin du fichier :")), self.filePathLabel)
+        self.detailsLayout.addRow(QLabel(self.tr("Taille du fichier :")), self.fileSizeLabel)
+        self.detailsLayout.addRow(QLabel(self.tr("Date de création :")), self.fileCreatedLabel)
+        self.detailsLayout.addRow(QLabel(self.tr("Date de modification :")), self.fileModifiedLabel)
 
         self.detailsGroupBox.setLayout(self.detailsLayout)
         self.layout.addWidget(self.detailsGroupBox)
@@ -184,40 +200,51 @@ class MainWindow(QMainWindow):
 
     def createMenuBar(self):
         menuBar = QMenuBar(self)
-        menuBar.setStyleSheet("""
-            QMenuBar {
-                background-color: #34495e;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QMenuBar::item {
-                background-color: #34495e;
-                padding: 5px 10px;
-            }
-            QMenuBar::item:selected {
-                background-color: #2980b9;
-            }
-            QMenu {
-                background-color: #34495e;
-                color: white;
-            }
-            QMenu::item:selected {
-                background-color: #2980b9;
-            }
-        """)
         self.setMenuBar(menuBar)
 
-        themeMenu = menuBar.addMenu("Thème")
+        fileMenu = menuBar.addMenu(self.tr("Fichier"))
 
-        self.switchThemeAction = QAction("Basculer vers le thème sombre", self)
-        self.switchThemeAction.triggered.connect(self.switchTheme)
-        themeMenu.addAction(self.switchThemeAction)
+        saveSettingsAction = QAction(self.tr("Sauvegarder les paramètres"), self)
+        saveSettingsAction.triggered.connect(self.saveSettings)
+        fileMenu.addAction(saveSettingsAction)
+
+        loadSettingsAction = QAction(self.tr("Charger les paramètres"), self)
+        loadSettingsAction.triggered.connect(self.loadSettings)
+        fileMenu.addAction(loadSettingsAction)
+
+        themeMenu = menuBar.addMenu(self.tr("Thème"))
+
+        lightThemeAction = QAction(self.tr("Thème Clair"), self)
+        lightThemeAction.triggered.connect(lambda: self.switchTheme('light'))
+        themeMenu.addAction(lightThemeAction)
+
+        darkThemeAction = QAction(self.tr("Thème Sombre"), self)
+        darkThemeAction.triggered.connect(lambda: self.switchTheme('dark'))
+        themeMenu.addAction(darkThemeAction)
+
+        blueThemeAction = QAction(self.tr("Thème Bleu"), self)
+        blueThemeAction.triggered.connect(lambda: self.switchTheme('blue'))
+        themeMenu.addAction(blueThemeAction)
+
+        languageMenu = menuBar.addMenu(self.tr("Langue"))
+
+        frenchAction = QAction("Français", self)
+        frenchAction.triggered.connect(lambda: self.switchLanguage('fr'))
+        languageMenu.addAction(frenchAction)
+
+        englishAction = QAction("English", self)
+        englishAction.triggered.connect(lambda: self.switchLanguage('en'))
+        languageMenu.addAction(englishAction)
 
     def createStatusBar(self):
         self.statusBar = QStatusBar(self)
         self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage("Prêt")
+        self.statusBar.showMessage(self.tr("Prêt"))
+
+    def createSystemTray(self):
+        self.trayIcon = QSystemTrayIcon(self)
+        self.trayIcon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
+        self.trayIcon.show()
 
     def light_theme_stylesheet(self):
         return """
@@ -231,14 +258,14 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
                 margin-bottom: 10px;
             }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox {
+            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
                 border: 1px solid #bdc3c7;
                 border-radius: 8px;
                 padding: 10px;
                 background-color: #ffffff;
                 font-size: 15px;
             }
-            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus {
+            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
                 border: 1px solid #3498db;
                 outline: none;
             }
@@ -302,7 +329,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
                 margin-bottom: 10px;
             }
-            QLineEdit, QComboBox, QCheckBox, QSpinBox {
+            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
                 border: 1px solid #95a5a6;
                 border-radius: 8px;
                 padding: 10px;
@@ -310,7 +337,7 @@ class MainWindow(QMainWindow):
                 color: #ecf0f1;
                 font-size: 15px;
             }
-            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus {
+            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
                 border: 1px solid #1abc9c;
                 outline: none;
             }
@@ -363,6 +390,77 @@ class MainWindow(QMainWindow):
             }
         """
 
+    def blue_theme_stylesheet(self):
+        return """
+            QWidget {
+                font-size: 16px;
+                font-family: 'Roboto', sans-serif;
+                background-color: #e3f2fd;
+            }
+            QLabel {
+                color: #1e88e5;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+            QLineEdit, QComboBox, QCheckBox, QSpinBox, QDateEdit {
+                border: 1px solid #64b5f6;
+                border-radius: 8px;
+                padding: 10px;
+                background-color: #ffffff;
+                font-size: 15px;
+            }
+            QLineEdit:focus, QComboBox:focus, QCheckBox:focus, QSpinBox:focus, QDateEdit:focus {
+                border: 1px solid #1e88e5;
+                outline: none;
+            }
+            QPushButton {
+                background-color: #1e88e5;
+                color: white;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                font-size: 15px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:pressed {
+                background-color: #0d47a1;
+            }
+            QProgressBar {
+                border: 1px solid #64b5f6;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 15px;
+                color: white;
+                background-color: #bbdefb;
+            }
+            QProgressBar::chunk {
+                background-color: #1e88e5;
+                width: 20px;
+            }
+            QTableWidget {
+                background-color: #ffffff;
+                border: 1px solid #64b5f6;
+                border-radius: 8px;
+                font-size: 15px;
+            }
+            QGroupBox {
+                background-color: #e3f2fd;
+                border: 1px solid #64b5f6;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 15px;
+                margin-top: 15px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                padding: 0 5px;
+                background-color: #64b5f6;
+                border-radius: 5px;
+            }
+        """
+
     def addSeparator(self):
         separator = QFrame(self)
         separator.setFrameShape(QFrame.HLine)
@@ -381,18 +479,18 @@ class MainWindow(QMainWindow):
                 animation.start(QPropertyAnimation.DeleteWhenStopped)
 
     def selectDirectories(self):
-        directories = QFileDialog.getExistingDirectory(self, "Sélectionner des dossiers", "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks | QFileDialog.Option())
+        directories = QFileDialog.getExistingDirectory(self, self.tr("Sélectionner des dossiers"), "", QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks | QFileDialog.Option())
         if directories:
             self.selected_directories.append(directories)
             self.directoryListWidget.addItem(directories)
 
     def startSearch(self):
         if not self.selected_directories:
-            QMessageBox.warning(self, "Erreur", "Veuillez sélectionner au moins un dossier pour la recherche.")
+            QMessageBox.warning(self, self.tr("Erreur"), self.tr("Veuillez sélectionner au moins un dossier pour la recherche."))
             return
         
         self.disableInputs(True)
-        self.statusBar.showMessage("Recherche en cours...")
+        self.statusBar.showMessage(self.tr("Recherche en cours..."))
         self.found_files.clear()
         self.resultTable.setRowCount(0)  # Clear the table
         self.progressBar.setVisible(True)
@@ -404,8 +502,10 @@ class MainWindow(QMainWindow):
         minSize = self.spinBoxMinSize.value() * 1024
         maxSize = self.spinBoxMaxSize.value() * 1024
         looseMatch = self.checkBoxLooseMatch.isChecked()
+        dateFrom = self.dateEditFrom.date()
+        dateTo = self.dateEditTo.date()
 
-        self.search_thread = FileSearchThread(self.selected_directories, fileName, fileFormat, minSize, maxSize, looseMatch)
+        self.search_thread = FileSearchThread(self.selected_directories, fileName, fileFormat, minSize, maxSize, looseMatch, dateFrom, dateTo)
         self.search_thread.file_found_signal.connect(self.fileFound)
         self.search_thread.search_complete_signal.connect(self.searchComplete)
         self.search_thread.start()
@@ -418,6 +518,8 @@ class MainWindow(QMainWindow):
         self.checkBoxLooseMatch.setDisabled(disable)
         self.pushButtonSearch.setDisabled(disable)
         self.selectDirButton.setDisabled(disable)
+        self.dateEditFrom.setDisabled(disable)
+        self.dateEditTo.setDisabled(disable)
 
     def fileFound(self, filePath):
         self.found_files.append(filePath)
@@ -434,20 +536,75 @@ class MainWindow(QMainWindow):
         self.disableInputs(False)
         if not self.found_files:
             self.lineEditFileName.setStyleSheet("border: 2px solid red;")
-            QMessageBox.warning(self, "Aucun Résultat", "Fichier non trouvé. Veuillez vérifier le nom et réessayer.")
-            self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
+            QMessageBox.warning(self, self.tr("Aucun Résultat"), self.tr("Fichier non trouvé. Veuillez vérifier le nom et réessayer."))
+            self.statusBar.showMessage(self.tr("Recherche terminée : aucun fichier trouvé"))
         else:
-            self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
+            self.statusBar.showMessage(self.tr("Recherche terminée : fichiers trouvés"))
+            self.trayIcon.showMessage("ExplorAI", self.tr("Recherche terminée : fichiers trouvés"), QSystemTrayIcon.Information, 5000)
 
-    def switchTheme(self):
-        if self.current_theme == 'light':
-            self.setStyleSheet(self.dark_theme_stylesheet())
-            self.switchThemeAction.setText("Basculer vers le thème clair")
-            self.current_theme = 'dark'
-        else:
+    def switchTheme(self, theme):
+        self.current_theme = theme
+        if theme == 'light':
             self.setStyleSheet(self.light_theme_stylesheet())
-            self.switchThemeAction.setText("Basculer vers le thème sombre")
-            self.current_theme = 'light'
+        elif theme == 'dark':
+            self.setStyleSheet(self.dark_theme_stylesheet())
+        elif theme == 'blue':
+            self.setStyleSheet(self.blue_theme_stylesheet())
+
+    def saveSettings(self):
+        settings = {
+            "directories": self.selected_directories,
+            "fileName": self.lineEditFileName.text(),
+            "fileFormat": self.comboBoxFileFormat.currentText(),
+            "minSize": self.spinBoxMinSize.value(),
+            "maxSize": self.spinBoxMaxSize.value(),
+            "looseMatch": self.checkBoxLooseMatch.isChecked(),
+            "dateFrom": self.dateEditFrom.date().toString(Qt.ISODate),
+            "dateTo": self.dateEditTo.date().toString(Qt.ISODate)
+        }
+        file_name, _ = QFileDialog.getSaveFileName(self, self.tr("Sauvegarder les paramètres"), "", self.tr("JSON Files (*.json)"))
+        if file_name:
+            with open(file_name, 'w') as file:
+                json.dump(settings, file)
+            QMessageBox.information(self, self.tr("Succès"), self.tr("Paramètres sauvegardés avec succès."))
+
+    def loadSettings(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, self.tr("Charger les paramètres"), "", self.tr("JSON Files (*.json)"))
+        if file_name:
+            with open(file_name, 'r') as file:
+                settings = json.load(file)
+                self.selected_directories = settings["directories"]
+                self.directoryListWidget.clear()
+                self.directoryListWidget.addItems(self.selected_directories)
+                self.lineEditFileName.setText(settings["fileName"])
+                self.comboBoxFileFormat.setCurrentText(settings["fileFormat"])
+                self.spinBoxMinSize.setValue(settings["minSize"])
+                self.spinBoxMaxSize.setValue(settings["maxSize"])
+                self.checkBoxLooseMatch.setChecked(settings["looseMatch"])
+                self.dateEditFrom.setDate(QDateTime.fromString(settings["dateFrom"], Qt.ISODate).date())
+                self.dateEditTo.setDate(QDateTime.fromString(settings["dateTo"], Qt.ISODate).date())
+            QMessageBox.information(self, self.tr("Succès"), self.tr("Paramètres chargés avec succès."))
+
+    def switchLanguage(self, language_code):
+        if language_code == 'fr':
+            self.translator.load(QLibraryInfo.location(QLibraryInfo.TranslationsPath) + "/qt_fr.qm")
+        elif language_code == 'en':
+            self.translator.load(QLibraryInfo.location(QLibraryInfo.TranslationsPath) + "/qt_en.qm")
+
+        QApplication.instance().installTranslator(self.translator)
+        self.retranslateUi()
+
+    def retranslateUi(self):
+        self.setWindowTitle(self.tr("ExplorAI - Votre assistant de recherche intelligent"))
+        self.labelTitle.setText(self.tr("Trouvez vos fichiers rapidement avec ExplorAI"))
+        self.selectDirButton.setText(self.tr("Sélectionner des dossiers"))
+        self.lineEditFileName.setPlaceholderText(self.tr("Entrez le nom du fichier..."))
+        self.optionalGroupBox.setTitle(self.tr("Options avancées"))
+        self.pushButtonSearch.setText(self.tr("Chercher"))
+        self.filterLineEdit.setPlaceholderText(self.tr("Filtrer les résultats..."))
+        self.resultTable.setHorizontalHeaderLabels([self.tr("Chemin des fichiers")])
+        self.detailsGroupBox.setTitle(self.tr("Détails du fichier"))
+        self.statusBar.showMessage(self.tr("Prêt"))
 
     def closeEvent(self, event):
         if hasattr(self, 'search_thread') and self.search_thread.isRunning():
@@ -468,9 +625,9 @@ class MainWindow(QMainWindow):
 
     def showContextMenu(self, position):
         menu = QMenu()
-        openAction = menu.addAction("Ouvrir le fichier")
-        openFolderAction = menu.addAction("Ouvrir le dossier contenant")
-        copyPathAction = menu.addAction("Copier le chemin du fichier")
+        openAction = menu.addAction(self.tr("Ouvrir le fichier"))
+        openFolderAction = menu.addAction(self.tr("Ouvrir le dossier contenant"))
+        copyPathAction = menu.addAction(self.tr("Copier le chemin du fichier"))
 
         action = menu.exec_(self.resultTable.viewport().mapToGlobal(position))
 
@@ -519,6 +676,12 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+
+    # Set the default language to French
+    translator = QTranslator()
+    translator.load(QLibraryInfo.location(QLibraryInfo.TranslationsPath) + "/qt_fr.qm")
+    app.installTranslator(translator)
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
