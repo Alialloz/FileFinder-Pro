@@ -5,11 +5,12 @@ import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit, 
                              QComboBox, QPushButton, QVBoxLayout, QWidget, 
                              QMessageBox, QCheckBox, QSpinBox, QProgressBar, 
-                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QGroupBox, QFormLayout, QMenu, QDateEdit)
+                             QMenuBar, QAction, QStatusBar, QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QListWidget, QGroupBox, QFormLayout, QMenu, QDateEdit, QHBoxLayout)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime, QTranslator, QLocale, QLibraryInfo
 from PyQt5.QtGui import QIcon, QDesktopServices
 from PyQt5.Qt import QUrl, QSystemTrayIcon, QStyle
 
+# Classe qui gère la recherche des fichiers dans un thread séparé
 class FileSearchThread(QThread):
     file_found_signal = pyqtSignal(str)
     search_complete_signal = pyqtSignal(bool)
@@ -38,11 +39,10 @@ class FileSearchThread(QThread):
                         file_size = os.path.getsize(file_path)
                         file_mtime = os.path.getmtime(file_path)
                     except OSError:
-                        continue  # Skip inaccessible files
+                        continue
 
-                    if self.fileFormat:
-                        if not file.lower().endswith(self.fileFormat.lower()):
-                            continue
+                    if self.fileFormat and not file.lower().endswith(self.fileFormat.lower()):
+                        continue
 
                     file_name_without_extension = os.path.splitext(file)[0]
                     file_date = QDateTime.fromSecsSinceEpoch(int(file_mtime)).date()
@@ -64,12 +64,12 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(self.tr("ExplorAI - Votre assistant de recherche intelligent"))
-        self.setGeometry(100, 100, 1000, 600)
-        self.setWindowIcon(QIcon('path/to/icon.png'))  # Assurez-vous que le chemin est correct
+        self.setGeometry(100, 100, 1200, 700)
+        self.setWindowIcon(QIcon('path/to/icon.png'))
         self.current_theme = 'light'
         self.selected_directories = []
         self.translator = QTranslator()
-        self.current_language = 'fr'  # Default language is French
+        self.current_language = 'fr'
         self.initUI()
         self.found_files = []
 
@@ -85,24 +85,29 @@ class MainWindow(QMainWindow):
 
         self.labelTitle = QLabel(self.tr("Trouvez vos fichiers rapidement avec ExplorAI"))
         self.labelTitle.setAlignment(Qt.AlignCenter)
-        self.labelTitle.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;")
+        self.labelTitle.setStyleSheet("font-size: 28px; font-weight: bold; color: #2c3e50; margin-bottom: 30px;")
         self.layout.addWidget(self.labelTitle)
 
         self.addSeparator()
 
-        # Add the directory selection UI
-        self.directoryListWidget = QListWidget(self)
-        self.layout.addWidget(QLabel(self.tr("Dossiers sélectionnés :"), self.centralWidget))
-        self.layout.addWidget(self.directoryListWidget)
+        # Nouvelle disposition en grille pour les entrées principales
+        gridLayout = QHBoxLayout()
+        self.layout.addLayout(gridLayout)
 
+        # Répertoires sélectionnés
+        self.directoryListWidget = QListWidget(self)
+        self.directoryListWidget.setStyleSheet("font-size: 14px;")
+        gridLayout.addWidget(self.directoryListWidget)
+
+        # Bouton pour sélectionner les répertoires
         self.selectDirButton = QPushButton(self.tr("Sélectionner des dossiers"), self)
         self.selectDirButton.setStyleSheet("font-size: 16px; padding: 10px;")
         self.selectDirButton.clicked.connect(self.selectDirectories)
-        self.layout.addWidget(self.selectDirButton)
+        gridLayout.addWidget(self.selectDirButton)
 
         self.addSeparator()
 
-        # Add essential search options
+        # Champ pour le nom de fichier
         self.lineEditFileName = QLineEdit(self)
         self.lineEditFileName.setPlaceholderText(self.tr("Entrez le nom du fichier..."))
         self.layout.addWidget(QLabel(self.tr("Nom du fichier :"), self.centralWidget))
@@ -110,13 +115,13 @@ class MainWindow(QMainWindow):
 
         self.addSeparator()
 
-        # Create dropdown for optional settings
+        # Groupe des options avancées
         self.optionalGroupBox = QGroupBox(self.tr("Options avancées"))
         self.optionalGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
         self.optionalLayout = QFormLayout()
 
         self.comboBoxFileFormat = QComboBox(self)
-        self.comboBoxFileFormat.addItem("")  # Item vide pour format optionnel
+        self.comboBoxFileFormat.addItem("")
         self.comboBoxFileFormat.addItems(['.png', '.jpg', '.txt', '.pdf'])
         self.optionalLayout.addRow(QLabel(self.tr("Format du fichier (optionnel) :"), self.centralWidget), self.comboBoxFileFormat)
 
@@ -131,12 +136,12 @@ class MainWindow(QMainWindow):
 
         self.dateEditFrom = QDateEdit(self)
         self.dateEditFrom.setCalendarPopup(True)
-        self.dateEditFrom.setDate(QDateTime.currentDateTime().date().addYears(-1))  # Default to one year ago
+        self.dateEditFrom.setDate(QDateTime.currentDateTime().date().addYears(-1))
         self.optionalLayout.addRow(QLabel(self.tr("Date de création à partir de :"), self.centralWidget), self.dateEditFrom)
 
         self.dateEditTo = QDateEdit(self)
         self.dateEditTo.setCalendarPopup(True)
-        self.dateEditTo.setDate(QDateTime.currentDateTime().date())  # Default to today
+        self.dateEditTo.setDate(QDateTime.currentDateTime().date())
         self.optionalLayout.addRow(QLabel(self.tr("Date de création jusqu'à :"), self.centralWidget), self.dateEditTo)
 
         self.checkBoxLooseMatch = QCheckBox(self.tr("Recherche non stricte du nom"), self)
@@ -144,13 +149,15 @@ class MainWindow(QMainWindow):
 
         self.optionalGroupBox.setLayout(self.optionalLayout)
         self.optionalGroupBox.setCheckable(True)
-        self.optionalGroupBox.setChecked(False)  # Initially collapsed
+        self.optionalGroupBox.setChecked(False)
         self.layout.addWidget(self.optionalGroupBox)
 
         self.addSeparator()
 
+        # Bouton de recherche avec icône
         self.pushButtonSearch = QPushButton(self.tr("Chercher"), self)
         self.pushButtonSearch.setStyleSheet("margin-top: 15px; padding: 15px; font-size: 18px; background-color: #2980b9; color: white; border-radius: 10px;")
+        self.pushButtonSearch.setIcon(QIcon('path/to/search_icon.png'))  # Ajoutez une icône de recherche
         self.pushButtonSearch.clicked.connect(self.startSearch)
         self.layout.addWidget(self.pushButtonSearch)
 
@@ -161,7 +168,6 @@ class MainWindow(QMainWindow):
 
         self.addSeparator()
 
-        # Search results and filter area
         self.filterLineEdit = QLineEdit(self)
         self.filterLineEdit.setPlaceholderText(self.tr("Filtrer les résultats..."))
         self.filterLineEdit.textChanged.connect(self.filterResults)
@@ -176,7 +182,7 @@ class MainWindow(QMainWindow):
         self.resultTable.itemSelectionChanged.connect(self.displayFileDetails)
         self.layout.addWidget(self.resultTable)
 
-        # Details panel
+        # Nouveau panneau des détails avec des sections plus visibles
         self.detailsGroupBox = QGroupBox(self.tr("Détails du fichier"))
         self.detailsGroupBox.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; }")
         self.detailsLayout = QFormLayout()
@@ -194,7 +200,7 @@ class MainWindow(QMainWindow):
         self.detailsGroupBox.setLayout(self.detailsLayout)
         self.layout.addWidget(self.detailsGroupBox)
 
-        self.layout.addStretch()  # Add stretch to push everything up and leave some space at the bottom
+        self.layout.addStretch()
 
         self.animateWidgets()
 
@@ -492,10 +498,9 @@ class MainWindow(QMainWindow):
         self.disableInputs(True)
         self.statusBar.showMessage(self.tr("Recherche en cours..."))
         self.found_files.clear()
-        self.resultTable.setRowCount(0)  # Clear the table
+        self.resultTable.setRowCount(0)
         self.progressBar.setVisible(True)
-        self.progressBar.setRange(0, 0)  # Indeterminate state
-        self.lineEditFileName.setStyleSheet("")  # Reset border color
+        self.progressBar.setRange(0, 0)
 
         fileName = self.lineEditFileName.text()
         fileFormat = self.comboBoxFileFormat.currentText() if self.comboBoxFileFormat.currentText() != "" else None
@@ -526,7 +531,6 @@ class MainWindow(QMainWindow):
         row_position = self.resultTable.rowCount()
         self.resultTable.insertRow(row_position)
         
-        # Set icon based on file type
         icon = self.getFileIcon(filePath)
         item = QTableWidgetItem(icon, filePath)
         self.resultTable.setItem(row_position, 0, item)
@@ -616,12 +620,12 @@ class MainWindow(QMainWindow):
         mime_type, _ = mimetypes.guess_type(filePath)
         if mime_type:
             if mime_type.startswith("image"):
-                return QIcon("path/to/image/icon.png")  # Replace with your icon paths
+                return QIcon("path/to/image/icon.png")
             elif mime_type.startswith("text"):
                 return QIcon("path/to/text/icon.png")
             elif mime_type.startswith("application/pdf"):
                 return QIcon("path/to/pdf/icon.png")
-        return QIcon("path/to/default/icon.png")  # Default icon
+        return QIcon("path/to/default/icon.png")
 
     def showContextMenu(self, position):
         menu = QMenu()
@@ -677,7 +681,6 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
 
-    # Set the default language to French
     translator = QTranslator()
     translator.load(QLibraryInfo.location(QLibraryInfo.TranslationsPath) + "/qt_fr.qm")
     app.installTranslator(translator)
