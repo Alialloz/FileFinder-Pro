@@ -47,4 +47,3 @@ FileFinderPro est distribué sous une licence open source. Voir le fichier LICEN
 - Email: [nayeripoor.ali@gmail.com](mailto:nayeripoor.ali@gmail.com)
 
 Nous espérons que vous trouverez FileFinderPro utile pour vos besoins de recherche de fichiers et nous encourageons toute contribution qui peut aider à améliorer ce projet!
-
