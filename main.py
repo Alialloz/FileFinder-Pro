@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QLineEdit,
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QDateTime, QTranslator, QLocale, QLibraryInfo
 from PyQt5.QtGui import QIcon, QDesktopServices, QFont
 from PyQt5.Qt import QUrl, QSystemTrayIcon, QStyle
+from PyQt5 import QtGui
 
 # Thread pour la recherche de fichiers
 class FileSearchThread(QThread):
@@ -85,20 +86,27 @@ class MainWindow(QMainWindow):
         self.layout.setContentsMargins(20, 20, 20, 20)  # Marges réduites pour un look plus compact
         self.centralWidget.setLayout(self.layout)
 
-        # Titre principal
-        self.labelTitle = QLabel("File Finder")
-        self.labelTitle.setAlignment(Qt.AlignCenter)
-        self.labelTitle.setFont(QFont("Arial", 24, QFont.Bold))  # Taille de police ajustée
-        self.labelTitle.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
-        self.layout.addWidget(self.labelTitle)
+        # Ajout d'un layout horizontal pour l'image à gauche et les textes à droite
+        headerLayout = QHBoxLayout()
 
-        # Sous-titre
-        self.labelSubtitle = QLabel("Recherche intelligente et rapide de vos fichiers")
-        self.labelSubtitle.setAlignment(Qt.AlignCenter)
-        self.labelSubtitle.setFont(QFont("Arial", 12))
-        self.labelSubtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
-        self.layout.addWidget(self.labelSubtitle)
+        # Image à gauche
+        self.imageLabel = QLabel(self)
+        pixmap = QtGui.QPixmap("image.png")
+        if pixmap.isNull():
+            print("Failed to load image")
+        else:
+            # Ajustement de la taille de l'image à une taille plus raisonnable
+            pixmap = pixmap.scaled(750, 750, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.imageLabel.setPixmap(pixmap)
 
+        # Ajout de marges pour éviter que l'image ne touche la barre d'outils
+        self.imageLabel.setContentsMargins(10, 10, 10, 10)
+
+        # Ajout de l'image dans le layout horizontal
+        headerLayout.addWidget(self.imageLabel)
+
+        # Ajouter le layout horizontal au layout principal avec des marges
+        self.layout.addLayout(headerLayout)
         self.addSeparator()
 
         # Dossiers sélectionnés
@@ -333,7 +341,7 @@ class MainWindow(QMainWindow):
     def get_button_stylesheet(self):
         return """
             QPushButton {
-                background-color: #2980b9;
+                background-color: #FABB07;
                 color: white;
                 border-radius: 8px;
                 padding: 8px 15px;
@@ -350,7 +358,7 @@ class MainWindow(QMainWindow):
     def get_primary_button_stylesheet(self):
         return """
             QPushButton {
-                background-color: #27ae60;
+                background-color: #FABB07;
                 color: white;
                 border-radius: 8px;
                 padding: 12px 20px;
@@ -436,13 +444,13 @@ class MainWindow(QMainWindow):
     def get_table_stylesheet(self):
         return """
             QTableWidget {
-                background-color: #ffffff;
-                border: 1px solid #bdc3c7;
+                background-color: #FFF1D3;
+                border: 1px solid #787406;
                 border-radius: 8px;
                 font-size: 14px;
             }
             QHeaderView::section {
-                background-color: #2980b9;
+                background-color: #FABB07;
                 color: white;
                 padding: 5px;
                 border: 1px solid #2980b9;
@@ -455,7 +463,7 @@ class MainWindow(QMainWindow):
     def get_groupbox_stylesheet(self):
         return """
             QGroupBox {
-                background-color: #f0f2f5;
+                background-color: #FFF1D3;
                 border: 1px solid #bdc3c7;
                 border-radius: 8px;
                 padding: 10px;
