@@ -63,15 +63,16 @@ class FileSearchThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ExplorAI - Recherche intelligente de fichiers")
+        self.setWindowTitle("File Finder - Recherche intelligente de fichiers")
         self.setGeometry(100, 100, 850, 550)  # Fenêtre plus petite par défaut
-        self.setWindowIcon(QIcon('path/to/icon.png'))
+        self.setWindowIcon(QIcon('logo.png'))
         self.current_theme = 'light'
         self.selected_directories = []
         self.translator = QTranslator()
         self.current_language = 'fr'
         self.initUI()
         self.found_files = []
+
 
     def initUI(self):
         self.createMenuBar()
@@ -85,7 +86,7 @@ class MainWindow(QMainWindow):
         self.centralWidget.setLayout(self.layout)
 
         # Titre principal
-        self.labelTitle = QLabel("ExplorAI")
+        self.labelTitle = QLabel("File Finder")
         self.labelTitle.setAlignment(Qt.AlignCenter)
         self.labelTitle.setFont(QFont("Arial", 24, QFont.Bold))  # Taille de police ajustée
         self.labelTitle.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
@@ -540,7 +541,7 @@ class MainWindow(QMainWindow):
             self.statusBar.showMessage("Recherche terminée : aucun fichier trouvé")
         else:
             self.statusBar.showMessage("Recherche terminée : fichiers trouvés")
-            self.trayIcon.showMessage("ExplorAI", "Recherche terminée : fichiers trouvés", QSystemTrayIcon.Information, 5000)
+            self.trayIcon.showMessage("File Finder", "Recherche terminée : fichiers trouvés", QSystemTrayIcon.Information, 5000)
 
     def switchTheme(self, theme):
         self.current_theme = theme
@@ -595,8 +596,8 @@ class MainWindow(QMainWindow):
         self.retranslateUi()
 
     def retranslateUi(self):
-        self.setWindowTitle("ExplorAI - Recherche intelligente de fichiers")
-        self.labelTitle.setText("ExplorAI")
+        self.setWindowTitle("File Finder - Recherche intelligente de fichiers")
+        self.labelTitle.setText("File Finder")
         self.labelSubtitle.setText("Recherche intelligente et rapide de vos fichiers")
         self.selectDirButton.setText("Sélectionner des dossiers")
         self.lineEditFileName.setPlaceholderText("Entrez le nom du fichier...")
@@ -688,3 +689,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
